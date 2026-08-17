@@ -15,9 +15,10 @@ import {
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const tool = getTool(params.id);
+  const { id } = await params;
+  const tool = getTool(id);
   if (!tool) {
     return NextResponse.json({ error: "Tool not found" }, { status: 404 });
   }
@@ -26,17 +27,18 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const body = (await request.json()) as Partial<NewTool>;
-    const tool = updateTool(params.id, body);
+    const tool = updateTool(id, body);
     if (!tool) {
       return NextResponse.json({ error: "Tool not found" }, { status: 404 });
     }
     return NextResponse.json({ tool });
   } catch (error) {
-    console.error(`PUT /api/tools/${params.id} failed:`, error);
+    console.error("PUT /api/tools/[id] failed:", error);
     return NextResponse.json(
       { error: "Failed to update tool" },
       { status: 500 }
@@ -46,16 +48,17 @@ export async function PUT(
 
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const success = deleteTool(params.id);
+    const { id } = await params;
+    const success = deleteTool(id);
     if (!success) {
       return NextResponse.json({ error: "Tool not found" }, { status: 404 });
     }
     return NextResponse.json({ ok: true });
   } catch (error) {
-    console.error(`DELETE /api/tools/${params.id} failed:`, error);
+    console.error("DELETE /api/tools/[id] failed:", error);
     return NextResponse.json(
       { error: "Failed to delete tool" },
       { status: 500 }

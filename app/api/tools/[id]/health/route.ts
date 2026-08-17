@@ -9,9 +9,10 @@ import { HEALTH_CHECKS, checkLocalLLM } from "@/lib/tools/health-checks";
 
 export async function POST(
   _request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const tool = getTool(params.id);
+  const { id } = await params;
+  const tool = getTool(id);
   if (!tool) {
     return NextResponse.json({ error: "Tool not found" }, { status: 404 });
   }
@@ -26,7 +27,6 @@ export async function POST(
   // Determine which health check to run
   let result;
   if (tool.type === "llm_endpoint") {
-    // Local LLM endpoint: check via endpoint URL (not API key)
     const endpoint =
       tool.endpoint ?? process.env.LLM_LOCAL_URL ?? "http://srvubuntu01:8080";
     result = await checkLocalLLM(endpoint);
