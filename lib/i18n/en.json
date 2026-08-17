@@ -1,0 +1,117 @@
+{
+  "app": {
+    "name": "OportunIA",
+    "tagline": "Your next client, with real closing probability."
+  },
+  "common": {
+    "search": "Search",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "loading": "Loading...",
+    "error": "Something went wrong",
+    "retry": "Retry",
+    "empty": "No results",
+    "yes": "Yes",
+    "no": "No",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "close": "Close",
+    "actions": "Actions",
+    "details": "Details",
+    "total": "Total",
+    "status": "Status"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "radar": "Radar",
+    "businesses": "Businesses",
+    "tools": "Tools",
+    "services": "Services",
+    "lists": "Lists",
+    "crm": "CRM",
+    "settings": "Settings",
+    "onboarding": "Welcome"
+  },
+  "language": {
+    "es": "Español",
+    "en": "English",
+    "switch": "Switch language"
+  },
+  "theme": {
+    "light": "Light",
+    "dark": "Dark",
+    "switch": "Switch theme"
+  },
+  "landing": {
+    "subtitle": "High-value client radar for AI services salespeople",
+    "feature1Title": "Find",
+    "feature1Desc": "Real businesses in your area with verified public data from Google Places, Yelp and the web.",
+    "feature2Title": "Score",
+    "feature2Desc": "5D score (Digital Gap + Operational Gap + Fit + Buying Signals + Proximity) that predicts closing probability.",
+    "feature3Title": "Propose",
+    "feature3Desc": "Auto-generates personalized proposals. PDF ready to print or send.",
+    "ctaPrimary": "Start finding prospects",
+    "ctaSecondary": "Configure tools",
+    "phaseIndicator": "Phase 0 · Foundation"
+  },
+  "scoring": {
+    "title": "Business Score",
+    "total": "Total Score",
+    "tier": {
+      "hot": "🔥 Close this week",
+      "warm": "⚡ Hot lead",
+      "nurture": "🌱 Nurture",
+      "skip": "❌ Skip"
+    },
+    "dimensions": {
+      "brechaDigital": "Digital Gap",
+      "gapOperativo": "Operational Gap",
+      "fitNegocio": "Business Fit",
+      "senalesCompra": "Buying Signals",
+      "proximidad": "Proximity"
+    }
+  },
+  "tools": {
+    "title": "Tools & Integrations",
+    "subtitle": "Configure the APIs and external services OportunIA uses to find and qualify businesses.",
+    "statusActive": "Active",
+    "statusError": "Error",
+    "statusUnconfigured": "Unconfigured",
+    "statusRateLimited": "Rate limited",
+    "addNew": "Add tool",
+    "testConnection": "Test connection",
+    "lastChecked": "Last checked",
+    "quotaUsed": "Quota used"
+  },
+  "radar": {
+    "title": "Search Radar",
+    "subtitle": "Find real businesses in any city and sector.",
+    "form": {
+      "city": "City",
+      "sector": "Sector",
+      "radius": "Radius (miles)",
+      "minScore": "Min score",
+      "submit": "Search businesses"
+    },
+    "results": {
+      "title": "Results",
+      "noResults": "No businesses found with those filters. Try a different sector or city."
+    }
+  },
+  "business": {
+    "profile": "Business Profile",
+    "phone": "Phone",
+    "website": "Website",
+    "address": "Address",
+    "rating": "Rating",
+    "reviews": "reviews",
+    "distance": "Distance",
+    "matchedServices": "Recommended Services",
+    "generateProposal": "Generate Proposal",
+    "talkingPoints": "Talking Points"
+  }
+}

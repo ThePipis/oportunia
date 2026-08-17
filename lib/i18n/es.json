@@ -1,0 +1,117 @@
+{
+  "app": {
+    "name": "OportunIA",
+    "tagline": "Tu próximo cliente, con probabilidad real de cerrar."
+  },
+  "common": {
+    "search": "Buscar",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "create": "Crear",
+    "loading": "Cargando...",
+    "error": "Algo salió mal",
+    "retry": "Reintentar",
+    "empty": "Sin resultados",
+    "yes": "Sí",
+    "no": "No",
+    "back": "Volver",
+    "next": "Siguiente",
+    "previous": "Anterior",
+    "close": "Cerrar",
+    "actions": "Acciones",
+    "details": "Detalles",
+    "total": "Total",
+    "status": "Estado"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "radar": "Radar",
+    "businesses": "Negocios",
+    "tools": "Herramientas",
+    "services": "Servicios",
+    "lists": "Listas",
+    "crm": "CRM",
+    "settings": "Settings",
+    "onboarding": "Bienvenida"
+  },
+  "language": {
+    "es": "Español",
+    "en": "English",
+    "switch": "Cambiar idioma"
+  },
+  "theme": {
+    "light": "Claro",
+    "dark": "Oscuro",
+    "switch": "Cambiar tema"
+  },
+  "landing": {
+    "subtitle": "Radar de clientes de alto valor para vendedores de servicios de AI",
+    "feature1Title": "Encuentra",
+    "feature1Desc": "Negocios reales en tu zona con data pública verificada de Google Places, Yelp y web.",
+    "feature2Title": "Califica",
+    "feature2Desc": "Score 5D (Brecha Digital + Gap Operativo + Fit + Compra + Proximidad) que predice probabilidad de cierre.",
+    "feature3Title": "Propón",
+    "feature3Desc": "Generador automático de propuestas personalizadas. PDF listo para imprimir o enviar.",
+    "ctaPrimary": "Empezar a buscar prospectos",
+    "ctaSecondary": "Configurar herramientas",
+    "phaseIndicator": "Phase 0 · Foundation"
+  },
+  "scoring": {
+    "title": "Score del Negocio",
+    "total": "Score Total",
+    "tier": {
+      "hot": "🔥 Cerrar esta semana",
+      "warm": "⚡ Lead caliente",
+      "nurture": "🌱 Nurture",
+      "skip": "❌ Skip"
+    },
+    "dimensions": {
+      "brechaDigital": "Brecha Digital",
+      "gapOperativo": "Gap Operativo",
+      "fitNegocio": "Fit del Negocio",
+      "senalesCompra": "Señales de Compra",
+      "proximidad": "Proximidad"
+    }
+  },
+  "tools": {
+    "title": "Herramientas & Integraciones",
+    "subtitle": "Configura las APIs y servicios externos que OportunIA usa para encontrar y calificar negocios.",
+    "statusActive": "Activa",
+    "statusError": "Con error",
+    "statusUnconfigured": "Sin configurar",
+    "statusRateLimited": "Rate limit",
+    "addNew": "Añadir herramienta",
+    "testConnection": "Probar conexión",
+    "lastChecked": "Última verificación",
+    "quotaUsed": "Quota usada"
+  },
+  "radar": {
+    "title": "Radar de Búsqueda",
+    "subtitle": "Encuentra negocios reales en cualquier ciudad y sector.",
+    "form": {
+      "city": "Ciudad",
+      "sector": "Sector",
+      "radius": "Radio (millas)",
+      "minScore": "Score mínimo",
+      "submit": "Buscar negocios"
+    },
+    "results": {
+      "title": "Resultados",
+      "noResults": "No encontramos negocios con esos filtros. Prueba con otro sector o ciudad."
+    }
+  },
+  "business": {
+    "profile": "Ficha del Negocio",
+    "phone": "Teléfono",
+    "website": "Sitio Web",
+    "address": "Dirección",
+    "rating": "Rating",
+    "reviews": "reseñas",
+    "distance": "Distancia",
+    "matchedServices": "Servicios Recomendados",
+    "generateProposal": "Generar Propuesta",
+    "talkingPoints": "Talking Points"
+  }
+}
