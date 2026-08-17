@@ -49,3 +49,7 @@ slides/imgs/
 # Temporary
 tmp/
 temp/
+
+# Backup/cached build directories (used during dev iteration)
+.next.old*/
+.next.bak/

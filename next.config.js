@@ -1,10 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // node:sqlite es nativo, no necesita configuración especial
-  experimental: {
-    // SQLite se carga como módulo nativo en el servidor
-  },
+  // node:sqlite es un módulo built-in de Node 22+ que debe quedar external
+  // para que Next.js no intente bundlearlo (causa "No such built-in module")
+  serverExternalPackages: ["node:sqlite"],
 };
 
 module.exports = nextConfig;

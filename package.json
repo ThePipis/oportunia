@@ -4,9 +4,9 @@
   "private": true,
   "description": "OportunIA - Radar de clientes de alto valor para vendedores de servicios de AI",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "cross-env NODE_OPTIONS=\"--experimental-sqlite\" next dev",
+    "build": "cross-env NODE_OPTIONS=\"--experimental-sqlite\" next build",
+    "start": "cross-env NODE_OPTIONS=\"--experimental-sqlite\" next start",
     "lint": "next lint",
     "db:migrate": "node --experimental-sqlite --import tsx lib/db/migrate.ts",
     "db:seed-tools": "node --experimental-sqlite --import tsx lib/db/seed-tools.ts",
@@ -14,9 +14,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-label": "^2.1.15",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "lucide-react": "^1.31.0",
     "next": "^15.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -27,6 +29,7 @@
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.5.4",
+    "cross-env": "^10.1.0",
     "postcss": "^8.5.26",
     "tailwindcss": "^3.4.19",
     "tsx": "^4.23.12",
