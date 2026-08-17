@@ -8,9 +8,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:migrate": "tsx lib/db/migrate.ts",
-    "db:seed-tools": "tsx lib/db/seed-tools.ts",
-    "db:seed-services": "tsx lib/db/seed-services.ts"
+    "db:migrate": "node --experimental-sqlite --import tsx lib/db/migrate.ts",
+    "db:seed-tools": "node --experimental-sqlite --import tsx lib/db/seed-tools.ts",
+    "db:seed-services": "node --experimental-sqlite --import tsx lib/db/seed-services.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.15",
@@ -28,6 +29,7 @@
     "autoprefixer": "^10.5.4",
     "postcss": "^8.5.26",
     "tailwindcss": "^3.4.19",
+    "tsx": "^4.23.12",
     "typescript": "^5.4.0"
   }
 }
