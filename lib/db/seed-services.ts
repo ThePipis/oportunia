@@ -438,6 +438,11 @@ function main() {
       console.log(`    ${s.name.padEnd(28)} $${s.price_setup} + $${s.price_monthly}/mo`);
     });
   }
+  return { created, updated };
 }
 
-main();
+if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith("seed-services.ts")) {
+  main();
+}
+
+export { main as seedServices };

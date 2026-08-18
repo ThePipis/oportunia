@@ -100,6 +100,12 @@ function main() {
   }
 
   console.log(`\n📊 Resumen: ${created} creadas, ${skipped} ya existían`);
+  return { created, skipped };
 }
 
-main();
+// Run if called directly
+if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith("seed-tools.ts")) {
+  main();
+}
+
+export { main as seedTools };
