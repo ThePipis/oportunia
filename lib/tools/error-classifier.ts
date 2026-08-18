@@ -30,7 +30,32 @@ export function classifyError(err: unknown): ClassifiedError {
   const statusMatch = msg.match(/HTTP\s+(\d{3})/);
   const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
 
-  if (status === 429) return { kind: "rate_limit", message: msg, status };
+  // -------------------------------------------------------------------------
+  // Detect monthly quota / billing issues BEFORE generic 429 handling.
+  // These should be treated as "permanent" so the account is marked as 'error'
+  // and skipped until the admin re-enables it (no point retrying in 5 min —
+  // the credit doesn't reset until next billing cycle).
+  // -------------------------------------------------------------------------
+  // Google's Maps Platform returns these patterns when $200/mo credit is gone:
+  //   - 429 + "billing" in message
+  //   - 429 + "OVER_QUERY_LIMIT" + per-day or per-month quota
+  //   - 200/4xx with "billing not enabled" or "budget exceeded"
+  const isBillingOrMonthly =
+    /billing\s+(not\s+enabled|account|disabled)|budget\s+exceeded|payment\s+required|monthly\s+quota|quota\s+limit\s+exceeded\s+for\s+the\s+month|free\s+trial\s+has\s+ended/i.test(
+      msg
+    );
+  if (isBillingOrMonthly) {
+    return { kind: "permanent", message: msg, status };
+  }
+
+  if (status === 429) {
+    // Per-minute or per-day rate limit (transient, retry after cooldown)
+    // unless the message specifically indicates per-day or monthly
+    if (/per\s+(day|month|project)|daily|monthly|PlacesAPIQueriesPerDayPerProject/i.test(msg)) {
+      return { kind: "permanent", message: msg, status };
+    }
+    return { kind: "rate_limit", message: msg, status };
+  }
   if (status === 408 || status === 500 || status === 502 || status === 503 || status === 504) {
     return { kind: "transient", message: msg, status };
   }

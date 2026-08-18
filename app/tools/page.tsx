@@ -255,7 +255,12 @@ export default function ToolsPage() {
   };
 
   const toggleAccountStatus = async (toolId: string, account: Account) => {
-    const next = account.status === "paused" ? "active" : "paused";
+    // Cycle: error → active (re-enable, e.g. after billing cycle resets);
+    //        paused → active; active → paused.
+    const next =
+      account.status === "active"
+        ? "paused"
+        : "active"; // both 'paused' and 'error' become 'active'
     try {
       await fetch(`/api/tools/${toolId}/keys/${account.id}`, {
         method: "PATCH",
@@ -587,7 +592,11 @@ export default function ToolsPage() {
                                           Editar
                                         </Button>
                                         <Button size="sm" variant="ghost" onClick={() => toggleAccountStatus(tool.id, account)}>
-                                          {isPaused ? "▶ Reanudar" : "⏸ Pausar"}
+                                          {account.status === "active"
+                                            ? "⏸ Pausar"
+                                            : account.status === "paused"
+                                            ? "▶ Reanudar"
+                                            : "↻ Re-habilitar"}
                                         </Button>
                                         <Button size="sm" variant="ghost" onClick={() => deleteAccount(tool.id, account.id)} className="text-red-400 hover:text-red-200 ml-auto">
                                           🗑
