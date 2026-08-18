@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ChevronDown } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -92,6 +93,10 @@ export default function ToolsPage() {
   const [newAccountKey, setNewAccountKey] = React.useState("");
   const [addingAccount, setAddingAccount] = React.useState(false);
   const [addDialogError, setAddDialogError] = React.useState<string | null>(null);
+  /** Per-tool card expansion state. Default: collapsed (show only last account). */
+  const [expandedAccounts, setExpandedAccounts] = React.useState<Record<string, boolean>>({});
+  const toggleExpanded = (toolId: string) =>
+    setExpandedAccounts((prev) => ({ ...prev, [toolId]: !prev[toolId] }));
   const [testingAccount, setTestingAccount] = React.useState<string | null>(null);
   const [editingAccount, setEditingAccount] = React.useState<Account | null>(null);
 
@@ -472,104 +477,149 @@ export default function ToolsPage() {
                             No hay cuentas configuradas. Agregá al menos una API key para empezar.
                           </div>
                         ) : (
-                          <div className="space-y-2">
-                            {accounts.map((account, idx) => {
-                              const accBadge = ACCOUNT_STATUS_BADGES[account.status];
-                              const quotaPct =
-                                account.quota_limit && account.quota_limit > 0
-                                  ? Math.min(100, Math.round((account.quota_used / account.quota_limit) * 100))
-                                  : 0;
-                              const isPaused = account.status === "paused";
-                              return (
-                                <div
-                                  key={account.id}
-                                  className={`p-3 rounded-lg border border-white/10 bg-slate-900/40 ${
-                                    isPaused ? "opacity-60" : ""
-                                  }`}
-                                >
-                                  <div className="flex items-center justify-between gap-2">
-                                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                                      <span className="text-slate-500 font-mono text-xs w-6">#{idx + 1}</span>
-                                      <div className="min-w-0 flex-1">
-                                        <div className="flex items-center gap-2">
-                                          <span className="font-semibold text-sm text-slate-100 truncate">
-                                            {account.label ?? `Cuenta ${idx + 1}`}
-                                          </span>
-                                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border ${accBadge.className}`}>
-                                            {accBadge.label}
-                                          </span>
-                                        </div>
-                                        <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-0.5">
-                                          <span className="font-mono">{account.api_key_masked}</span>
-                                          <span>·</span>
-                                          <span>Usos: {account.quota_used.toLocaleString()}</span>
-                                          {account.last_used && (
-                                            <>
+                          (() => {
+                            // Collapse by default: show only the most recently added account.
+                            // The last account (highest sort_order) is the newest, so it's the
+                            // one the smart router will likely use first (most quota remaining).
+                            const isExpanded = expandedAccounts[tool.id] ?? false;
+                            const canCollapse = accounts.length > 1;
+                            const visibleAccounts = isExpanded || !canCollapse
+                              ? accounts
+                              : accounts.slice(-1);
+                            const hiddenCount = accounts.length - visibleAccounts.length;
+                            return (
+                              <div className="space-y-2">
+                                {visibleAccounts.map((account) => {
+                                  // idx is the real position in the full list (for move buttons)
+                                  const idx = accounts.findIndex((a) => a.id === account.id);
+                                  const accBadge = ACCOUNT_STATUS_BADGES[account.status];
+                                  const quotaPct =
+                                    account.quota_limit && account.quota_limit > 0
+                                      ? Math.min(100, Math.round((account.quota_used / account.quota_limit) * 100))
+                                      : 0;
+                                  const isPaused = account.status === "paused";
+                                  const isLatest = !isExpanded && canCollapse && idx === accounts.length - 1;
+                                  return (
+                                    <div
+                                      key={account.id}
+                                      className={`p-3 rounded-lg border border-white/10 bg-slate-900/40 ${
+                                        isPaused ? "opacity-60" : ""
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                          <span className="text-slate-500 font-mono text-xs w-6">#{idx + 1}</span>
+                                          <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-2">
+                                              <span className="font-semibold text-sm text-slate-100 truncate">
+                                                {account.label ?? `Cuenta ${idx + 1}`}
+                                              </span>
+                                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border ${accBadge.className}`}>
+                                                {accBadge.label}
+                                              </span>
+                                              {isLatest && (
+                                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                                                  Más reciente
+                                                </span>
+                                              )}
+                                            </div>
+                                            <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-0.5">
+                                              <span className="font-mono">{account.api_key_masked}</span>
                                               <span>·</span>
-                                              <span>Última: {relativeTime(account.last_used)}</span>
-                                            </>
-                                          )}
+                                              <span>Usos: {account.quota_used.toLocaleString()}</span>
+                                              {account.last_used && (
+                                                <>
+                                                  <span>·</span>
+                                                  <span>Última: {relativeTime(account.last_used)}</span>
+                                                </>
+                                              )}
+                                            </div>
+                                          </div>
                                         </div>
+                                        {/* Move up/down only when expanded (can't reorder from collapsed view) */}
+                                        {isExpanded && (
+                                          <div className="flex items-center gap-1">
+                                            <button
+                                              onClick={() => moveAccount(tool.id, account.id, "up")}
+                                              disabled={idx === 0}
+                                              className="text-slate-500 hover:text-slate-200 disabled:opacity-30 px-1"
+                                              title="Mover arriba"
+                                            >
+                                              ▲
+                                            </button>
+                                            <button
+                                              onClick={() => moveAccount(tool.id, account.id, "down")}
+                                              disabled={idx === accounts.length - 1}
+                                              className="text-slate-500 hover:text-slate-200 disabled:opacity-30 px-1"
+                                              title="Mover abajo"
+                                            >
+                                              ▼
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Quota bar */}
+                                      {account.quota_limit && account.quota_limit > 0 && (
+                                        <div className="mt-2 h-1 bg-slate-800 rounded-full overflow-hidden">
+                                          <div
+                                            className={`h-full transition-all ${
+                                              quotaPct > 80 ? "bg-red-400" : quotaPct > 50 ? "bg-amber-400" : "bg-emerald-400"
+                                            }`}
+                                            style={{ width: `${quotaPct}%` }}
+                                          />
+                                        </div>
+                                      )}
+
+                                      {/* Last error */}
+                                      {account.last_error && (
+                                        <p className="mt-2 text-[11px] text-red-300 font-mono truncate" title={account.last_error}>
+                                          ⚠ {account.last_error.slice(0, 120)}
+                                        </p>
+                                      )}
+
+                                      {/* Per-account actions */}
+                                      <div className="flex items-center gap-1 mt-2 pt-2 border-t border-white/5">
+                                        <Button size="sm" variant="ghost" onClick={() => testAccount(tool.id, account.id)} disabled={testingAccount === account.id}>
+                                          {testingAccount === account.id ? "Probando..." : "Probar"}
+                                        </Button>
+                                        <Button size="sm" variant="ghost" onClick={() => setEditingAccount(account)}>
+                                          Editar
+                                        </Button>
+                                        <Button size="sm" variant="ghost" onClick={() => toggleAccountStatus(tool.id, account)}>
+                                          {isPaused ? "▶ Reanudar" : "⏸ Pausar"}
+                                        </Button>
+                                        <Button size="sm" variant="ghost" onClick={() => deleteAccount(tool.id, account.id)} className="text-red-400 hover:text-red-200 ml-auto">
+                                          🗑
+                                        </Button>
                                       </div>
                                     </div>
-                                    <div className="flex items-center gap-1">
-                                      <button
-                                        onClick={() => moveAccount(tool.id, account.id, "up")}
-                                        disabled={idx === 0}
-                                        className="text-slate-500 hover:text-slate-200 disabled:opacity-30 px-1"
-                                        title="Mover arriba"
-                                      >
-                                        ▲
-                                      </button>
-                                      <button
-                                        onClick={() => moveAccount(tool.id, account.id, "down")}
-                                        disabled={idx === accounts.length - 1}
-                                        className="text-slate-500 hover:text-slate-200 disabled:opacity-30 px-1"
-                                        title="Mover abajo"
-                                      >
-                                        ▼
-                                      </button>
-                                    </div>
-                                  </div>
+                                  );
+                                })}
 
-                                  {/* Quota bar */}
-                                  {account.quota_limit && account.quota_limit > 0 && (
-                                    <div className="mt-2 h-1 bg-slate-800 rounded-full overflow-hidden">
-                                      <div
-                                        className={`h-full transition-all ${
-                                          quotaPct > 80 ? "bg-red-400" : quotaPct > 50 ? "bg-amber-400" : "bg-emerald-400"
-                                        }`}
-                                        style={{ width: `${quotaPct}%` }}
-                                      />
-                                    </div>
-                                  )}
-
-                                  {/* Last error */}
-                                  {account.last_error && (
-                                    <p className="mt-2 text-[11px] text-red-300 font-mono truncate" title={account.last_error}>
-                                      ⚠ {account.last_error.slice(0, 120)}
-                                    </p>
-                                  )}
-
-                                  {/* Per-account actions */}
-                                  <div className="flex items-center gap-1 mt-2 pt-2 border-t border-white/5">
-                                    <Button size="sm" variant="ghost" onClick={() => testAccount(tool.id, account.id)} disabled={testingAccount === account.id}>
-                                      {testingAccount === account.id ? "Probando..." : "Probar"}
-                                    </Button>
-                                    <Button size="sm" variant="ghost" onClick={() => setEditingAccount(account)}>
-                                      Editar
-                                    </Button>
-                                    <Button size="sm" variant="ghost" onClick={() => toggleAccountStatus(tool.id, account)}>
-                                      {isPaused ? "▶ Reanudar" : "⏸ Pausar"}
-                                    </Button>
-                                    <Button size="sm" variant="ghost" onClick={() => deleteAccount(tool.id, account.id)} className="text-red-400 hover:text-red-200 ml-auto">
-                                      🗑
-                                    </Button>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
+                                {/* Expand / collapse chevron (only when 2+ accounts) */}
+                                {canCollapse && (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleExpanded(tool.id)}
+                                    aria-expanded={isExpanded}
+                                    className="w-full flex items-center justify-center gap-2 px-3 py-2 mt-1 text-xs text-slate-400 hover:text-slate-100 border border-dashed border-white/10 hover:border-sky-400/40 rounded-md bg-slate-900/20 hover:bg-slate-900/40 transition-colors"
+                                  >
+                                    <span>
+                                      {isExpanded
+                                        ? "Ocultar cuentas"
+                                        : `Mostrar ${hiddenCount} cuenta${hiddenCount === 1 ? "" : "s"} más`}
+                                    </span>
+                                    <ChevronDown
+                                      className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                                        isExpanded ? "rotate-180" : ""
+                                      }`}
+                                    />
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })()
                         )}
 
                         <div className="flex items-center gap-2 pt-2">
