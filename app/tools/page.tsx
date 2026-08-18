@@ -91,6 +91,7 @@ export default function ToolsPage() {
   const [newAccountLabel, setNewAccountLabel] = React.useState("");
   const [newAccountKey, setNewAccountKey] = React.useState("");
   const [addingAccount, setAddingAccount] = React.useState(false);
+  const [addDialogError, setAddDialogError] = React.useState<string | null>(null);
   const [testingAccount, setTestingAccount] = React.useState<string | null>(null);
   const [editingAccount, setEditingAccount] = React.useState<Account | null>(null);
 
@@ -190,10 +191,11 @@ export default function ToolsPage() {
   // ---- Multi-account actions ----
   const addAccount = async (toolId: string) => {
     if (!newAccountKey || newAccountKey.trim().length < 8) {
-      setError("La API key debe tener al menos 8 caracteres");
+      setAddDialogError("La API key debe tener al menos 8 caracteres");
       return;
     }
     setAddingAccount(true);
+    setAddDialogError(null);
     try {
       const res = await fetch(`/api/tools/${toolId}/keys`, {
         method: "POST",
@@ -209,11 +211,13 @@ export default function ToolsPage() {
       }
       setNewAccountKey("");
       setNewAccountLabel("");
+      setAddDialogError(null);
       setAddAccountOpen(null);
       await fetchAccounts(toolId);
       await fetchTools(); // refresh status
     } catch (e: any) {
-      setError(e.message);
+      // Show error INSIDE the dialog so the user sees it without scrolling
+      setAddDialogError(e.message ?? "Error desconocido al guardar la cuenta");
     } finally {
       setAddingAccount(false);
     }
@@ -658,6 +662,7 @@ export default function ToolsPage() {
               setAddAccountOpen(null);
               setNewAccountKey("");
               setNewAccountLabel("");
+              setAddDialogError(null);
             }
           }}
         >
@@ -675,7 +680,10 @@ export default function ToolsPage() {
                   id="accLabel"
                   placeholder="Personal, Trabajo #1, Cuenta A, etc."
                   value={newAccountLabel}
-                  onChange={(e) => setNewAccountLabel(e.target.value)}
+                  onChange={(e) => {
+                    setNewAccountLabel(e.target.value);
+                    setAddDialogError(null);
+                  }}
                 />
               </div>
               <div className="space-y-2">
@@ -685,7 +693,10 @@ export default function ToolsPage() {
                   type="password"
                   placeholder="AIza... o tu-key-aqui"
                   value={newAccountKey}
-                  onChange={(e) => setNewAccountKey(e.target.value)}
+                  onChange={(e) => {
+                    setNewAccountKey(e.target.value);
+                    setAddDialogError(null);
+                  }}
                 />
                 <p className="text-xs text-slate-500">
                   Conseguila en{" "}
@@ -699,6 +710,11 @@ export default function ToolsPage() {
                   </a>
                 </p>
               </div>
+              {addDialogError && (
+                <div className="text-xs text-red-300 bg-red-500/10 border border-red-500/30 rounded-md px-3 py-2">
+                  ⚠ {addDialogError}
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button variant="ghost" onClick={() => setAddAccountOpen(null)}>
