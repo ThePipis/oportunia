@@ -35,9 +35,10 @@ export default function ServicesPage() {
   const { t, locale } = useT();
   const [services, setServices] = React.useState<Service[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [editingService, setEditingService] = React.useState<Service | null>(null);
+  // Track which service is in edit mode (by id). Inline edit — no bottom modal.
+  const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editForm, setEditForm] = React.useState<Partial<Service>>({});
-  const [saving, setSaving] = React.useState(false);
+  const [savingId, setSavingId] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -50,7 +51,7 @@ export default function ServicesPage() {
   React.useEffect(() => { load(); }, [load]);
 
   const startEdit = (svc: Service) => {
-    setEditingService(svc);
+    setEditingId(svc.id);
     setEditForm({
       name: svc.name,
       description: svc.description,
@@ -61,23 +62,22 @@ export default function ServicesPage() {
   };
 
   const cancelEdit = () => {
-    setEditingService(null);
+    setEditingId(null);
     setEditForm({});
   };
 
-  const saveEdit = async () => {
-    if (!editingService) return;
-    setSaving(true);
+  const saveEdit = async (svc: Service) => {
+    setSavingId(svc.id);
     try {
       await fetch("/api/services", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: editingService.id, patch: editForm }),
+        body: JSON.stringify({ id: svc.id, patch: editForm }),
       });
       await load();
       cancelEdit();
     } finally {
-      setSaving(false);
+      setSavingId(null);
     }
   };
 
@@ -108,7 +108,8 @@ export default function ServicesPage() {
             <p className="text-sm text-slate-400 mt-2 max-w-2xl">
               Los 12 servicios que OportunIA matchea con cada negocio. Editá nombres, descripciones, precios y pitches.
             </p>
-          </div></div>
+          </div>
+        </div>
 
         {/* Nav */}
         <div className="flex items-center gap-3 text-sm">
@@ -138,130 +139,169 @@ export default function ServicesPage() {
                     <span className="text-xs text-slate-500">{items.length} servicios</span>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {items.map((svc) => (
-                      <Card key={svc.id} className={`card-glass-hover ${!svc.active ? "opacity-50" : ""}`}>
-                        <CardContent className="pt-6 space-y-3">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-3xl">{svc.icon ?? "🔧"}</span>
+                    {items.map((svc) => {
+                      const isEditing = editingId === svc.id;
+                      const isSaving = savingId === svc.id;
+                      return (
+                        <Card
+                          key={svc.id}
+                          className={`card-glass-hover ${!svc.active ? "opacity-50" : ""} ${
+                            isEditing ? "ring-2 ring-orange-500/50 border-orange-500/40" : ""
+                          }`}
+                        >
+                          <CardContent className="pt-6 space-y-3">
+                            {/* Header row: icon + name (or input) + active toggle */}
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <span className="text-3xl shrink-0">{svc.icon ?? "🔧"}</span>
+                                <div className="flex-1 min-w-0">
+                                  {isEditing ? (
+                                    <div className="space-y-1">
+                                      <input
+                                        aria-label="Nombre"
+                                        className="w-full bg-slate-900/60 border border-white/10 rounded-md px-2 py-1.5 text-sm font-bold text-slate-100"
+                                        value={editForm.name ?? ""}
+                                        onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                      />
+                                      {svc.name_en && svc.name_en !== svc.name && (
+                                        <p className="text-xs text-slate-500 px-1">{svc.name_en}</p>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <h3 className="font-bold text-slate-100">{svc.name}</h3>
+                                      {svc.name_en && svc.name_en !== svc.name && (
+                                        <p className="text-xs text-slate-500">{svc.name_en}</p>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => toggleActive(svc)}
+                                className="text-xs text-slate-500 hover:text-slate-300 shrink-0"
+                                title={svc.active ? "Click para desactivar" : "Click para activar"}
+                              >
+                                {svc.active ? "🟢" : "⚫"}
+                              </button>
+                            </div>
+
+                            {/* Description: textarea when editing, paragraph when not */}
+                            {isEditing ? (
                               <div>
-                                <h3 className="font-bold text-slate-100">{svc.name}</h3>
-                                {svc.name_en && svc.name_en !== svc.name && (
-                                  <p className="text-xs text-slate-500">{svc.name_en}</p>
+                                <label className="text-[10px] uppercase tracking-wider text-slate-500 block mb-1">
+                                  Descripción
+                                </label>
+                                <textarea
+                                  rows={3}
+                                  className="w-full bg-slate-900/60 border border-white/10 rounded-md px-2 py-1.5 text-xs text-slate-100 leading-relaxed"
+                                  value={editForm.description ?? ""}
+                                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                                />
+                              </div>
+                            ) : (
+                              <p className="text-xs text-slate-300 leading-relaxed line-clamp-3">
+                                {svc.description}
+                              </p>
+                            )}
+
+                            {/* Pain solved — read-only in both modes (advanced field) */}
+                            {svc.pain_solved && !isEditing && (
+                              <p className="text-xs text-slate-500 italic">
+                                💡 {svc.pain_solved.slice(0, 120)}{svc.pain_solved.length > 120 ? "..." : ""}
+                              </p>
+                            )}
+
+                            {/* Footer: prices + action buttons */}
+                            <div className="pt-2 border-t border-white/5 space-y-2">
+                              {isEditing ? (
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="text-[10px] uppercase tracking-wider text-slate-500 block mb-1">
+                                      Setup ($)
+                                    </label>
+                                    <input
+                                      type="number"
+                                      className="w-full bg-slate-900/60 border border-white/10 rounded-md px-2 py-1.5 text-sm font-semibold text-sky-300"
+                                      value={editForm.price_setup ?? 0}
+                                      onChange={(e) => setEditForm({ ...editForm, price_setup: parseInt(e.target.value) || 0 })}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-[10px] uppercase tracking-wider text-slate-500 block mb-1">
+                                      Mensual ($)
+                                    </label>
+                                    <input
+                                      type="number"
+                                      className="w-full bg-slate-900/60 border border-white/10 rounded-md px-2 py-1.5 text-sm font-semibold text-sky-300"
+                                      value={editForm.price_monthly ?? 0}
+                                      onChange={(e) => setEditForm({ ...editForm, price_monthly: parseInt(e.target.value) || 0 })}
+                                    />
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm font-semibold text-sky-300">
+                                    ${svc.price_setup} + ${svc.price_monthly}/mo
+                                  </span>
+                                </div>
+                              )}
+
+                              {/* Pitch template — only when editing */}
+                              {isEditing && (
+                                <div>
+                                  <label className="text-[10px] uppercase tracking-wider text-slate-500 block mb-1">
+                                    Pitch Template
+                                  </label>
+                                  <textarea
+                                    rows={3}
+                                    className="w-full bg-slate-900/60 border border-white/10 rounded-md px-2 py-1.5 text-xs text-slate-100"
+                                    value={editForm.pitch_template ?? ""}
+                                    onChange={(e) => setEditForm({ ...editForm, pitch_template: e.target.value })}
+                                  />
+                                </div>
+                              )}
+
+                              {/* Action buttons: Edit OR Save/Cancel */}
+                              <div className="flex items-center justify-end gap-2 pt-1">
+                                {isEditing ? (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={cancelEdit}
+                                      disabled={isSaving}
+                                    >
+                                      ✕ Cancelar
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      onClick={() => saveEdit(svc)}
+                                      disabled={isSaving}
+                                    >
+                                      {isSaving ? "Guardando..." : "💾 Guardar"}
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => startEdit(svc)}
+                                  >
+                                    ✏️ Editar
+                                  </Button>
                                 )}
                               </div>
                             </div>
-                            <button
-                              onClick={() => toggleActive(svc)}
-                              className="text-xs text-slate-500 hover:text-slate-300"
-                              title={svc.active ? "Click para desactivar" : "Click para activar"}
-                            >
-                              {svc.active ? "🟢" : "⚫"}
-                            </button>
-                          </div>
-
-                          <p className="text-xs text-slate-300 leading-relaxed line-clamp-3">
-                            {svc.description}
-                          </p>
-
-                          {svc.pain_solved && (
-                            <p className="text-xs text-slate-500 italic">
-                              💡 {svc.pain_solved.slice(0, 120)}{svc.pain_solved.length > 120 ? "..." : ""}
-                            </p>
-                          )}
-
-                          <div className="flex items-center justify-between pt-2 border-t border-white/5">
-                            <span className="text-sm font-semibold text-sky-300">
-                              ${svc.price_setup} + ${svc.price_monthly}/mo
-                            </span>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => startEdit(svc)}
-                            >
-                              ✏️ Editar
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
                   </div>
                 </section>
               );
             })}
           </>
-        )}
-
-        {/* Edit modal (simple inline) */}
-        {editingService && (
-          <Card className="border-orange-500/30">
-            <CardContent className="pt-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-bold text-slate-100">
-                  Editando: {editingService.name}
-                </h2>
-                <button onClick={cancelEdit} className="text-slate-500 hover:text-slate-300">✕</button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs text-slate-400 block mb-1">Nombre</label>
-                  <input
-                    className="w-full bg-slate-900/60 border border-white/10 rounded-md px-3 py-2 text-sm text-slate-100"
-                    value={editForm.name ?? ""}
-                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-xs text-slate-400 block mb-1">Setup ($)</label>
-                    <input
-                      type="number"
-                      className="w-full bg-slate-900/60 border border-white/10 rounded-md px-3 py-2 text-sm text-slate-100"
-                      value={editForm.price_setup ?? 0}
-                      onChange={(e) => setEditForm({ ...editForm, price_setup: parseInt(e.target.value) || 0 })}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-400 block mb-1">Mensual ($)</label>
-                    <input
-                      type="number"
-                      className="w-full bg-slate-900/60 border border-white/10 rounded-md px-3 py-2 text-sm text-slate-100"
-                      value={editForm.price_monthly ?? 0}
-                      onChange={(e) => setEditForm({ ...editForm, price_monthly: parseInt(e.target.value) || 0 })}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs text-slate-400 block mb-1">Descripción</label>
-                <textarea
-                  rows={3}
-                  className="w-full bg-slate-900/60 border border-white/10 rounded-md px-3 py-2 text-sm text-slate-100"
-                  value={editForm.description ?? ""}
-                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-slate-400 block mb-1">Pitch Template (con placeholders)</label>
-                <textarea
-                  rows={4}
-                  className="w-full bg-slate-900/60 border border-white/10 rounded-md px-3 py-2 text-sm text-slate-100"
-                  value={editForm.pitch_template ?? ""}
-                  onChange={(e) => setEditForm({ ...editForm, pitch_template: e.target.value })}
-                />
-              </div>
-
-              <div className="flex items-center gap-2 pt-2">
-                <Button onClick={saveEdit} disabled={saving}>
-                  {saving ? "Guardando..." : "💾 Guardar"}
-                </Button>
-                <Button variant="ghost" onClick={cancelEdit}>Cancelar</Button>
-              </div>
-            </CardContent>
-          </Card>
         )}
       </div>
     </main>

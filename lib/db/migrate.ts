@@ -10,8 +10,17 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getDb, closeDb } from "./client";
+import { migrateLegacyKeysToAccounts } from "./repositories/tool-api-keys";
 
 const SCHEMA_PATH = path.join(process.cwd(), "lib", "db", "schema.sql");
+
+function addColumnIfMissing(table: string, column: string, ddl: string): boolean {
+  const db = getDb();
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (cols.some((c) => c.name === column)) return false;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+  return true;
+}
 
 function main() {
   console.log("🔧 Ejecutando migraciones...");
@@ -24,14 +33,33 @@ function main() {
   const schema = fs.readFileSync(SCHEMA_PATH, "utf-8");
   const db = getDb();
 
-  // Ejecutar el schema completo
+  // Ejecutar el schema completo (CREATE IF NOT EXISTS → idempotente)
   db.exec(schema);
+
+  // -------------------------------------------------------------------------
+  // Incremental ALTERs para columnas añadidas en versiones posteriores
+  // -------------------------------------------------------------------------
+  if (addColumnIfMissing("tool_configs", "supports_multiple_keys", "INTEGER NOT NULL DEFAULT 0")) {
+    console.log("   ↪ tool_configs.supports_multiple_keys añadida");
+  }
+
+  // Marcar gemini-pro como multi-key para instalaciones existentes
+  db.prepare(
+    `UPDATE tool_configs SET supports_multiple_keys = 1
+     WHERE name = 'gemini-pro' AND supports_multiple_keys = 0`
+  ).run();
+
+  // Migrar API keys legacy (gemini-pro) al nuevo esquema multi-cuenta
+  const migrated = migrateLegacyKeysToAccounts();
+  if (migrated > 0) {
+    console.log(`   ↪ ${migrated} API key(s) legacy migradas a tool_api_keys`);
+  }
 
   // Insertar versión del schema
   const insertVersion = db.prepare(
     "INSERT OR REPLACE INTO schema_version (version, description) VALUES (?, ?)"
   );
-  insertVersion.run(1, "Initial schema: 12 tables for MVP");
+  insertVersion.run(2, "Multi-account API keys for Gemini Pro (tool_api_keys table)");
 
   // Verificar tablas creadas
   const tables = db
@@ -40,7 +68,7 @@ function main() {
     )
     .all() as { name: string }[];
 
-  console.log(`\n✅ Migración completada. ${tables.length} tablas creadas:\n`);
+  console.log(`\n✅ Migración completada. ${tables.length} tablas:\n`);
   tables.forEach((t) => {
     const count = db
       .prepare(`SELECT COUNT(*) as c FROM ${t.name}`)

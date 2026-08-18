@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS tool_configs (
   quota_used INTEGER DEFAULT 0,
   quota_limit INTEGER,
   quota_period TEXT CHECK (quota_period IN ('day', 'month', 'request') OR quota_period IS NULL),
+  supports_multiple_keys INTEGER NOT NULL DEFAULT 0,  -- 1 = tool can have many API keys (e.g. multi-account Gemini)
   icon TEXT,
   docs_url TEXT,
   sort_order INTEGER DEFAULT 0,
@@ -50,6 +51,30 @@ CREATE TABLE IF NOT EXISTS tool_configs (
 
 CREATE INDEX IF NOT EXISTS idx_tool_configs_type ON tool_configs(type);
 CREATE INDEX IF NOT EXISTS idx_tool_configs_status ON tool_configs(status);
+
+-- Multi-account API keys for tools that support it (e.g. multiple Gemini Pro accounts).
+-- The LLM router tries accounts in sort_order; on 429/5xx it falls back to the next.
+-- On 403/400 it marks the account as 'error' but may try others.
+CREATE TABLE IF NOT EXISTS tool_api_keys (
+  id TEXT PRIMARY KEY,
+  tool_id TEXT NOT NULL,
+  label TEXT,                -- "Account #1 (Personal)", "Work #1", etc.
+  api_key_encrypted TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'rate_limited', 'error', 'disabled', 'paused')),
+  last_used INTEGER,
+  last_error TEXT,
+  last_error_at INTEGER,
+  quota_used INTEGER NOT NULL DEFAULT 0,
+  quota_limit INTEGER,        -- per-key override; null = inherit from tool
+  cooldown_until INTEGER,     -- unix seconds; skip until this time
+  created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+  updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+  FOREIGN KEY (tool_id) REFERENCES tool_configs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_tool_api_keys_tool_order ON tool_api_keys(tool_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_tool_api_keys_status ON tool_api_keys(status);
 
 -- Negocios prospectados (de Google Places, Yelp, etc.)
 CREATE TABLE IF NOT EXISTS businesses (

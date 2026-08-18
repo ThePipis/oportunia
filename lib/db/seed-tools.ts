@@ -73,10 +73,11 @@ const TOOL_TEMPLATES = [
     name: "gemini-pro",
     display_name: "Google Gemini Pro",
     description:
-      "LLM cloud para análisis complejos. Usa una de tus 4 cuentas Pro. Tier premium fallback.",
+      "LLM cloud para análisis complejos. Soporta múltiples cuentas Pro con auto-fallback cuando una se queda sin cuota.",
     icon: "✨",
     docs_url: "https://aistudio.google.com/apikey",
     sort_order: 60,
+    supports_multiple_keys: 1 as any,
   },
 ];
 

@@ -31,6 +31,7 @@ export interface Tool {
   quota_used: number;
   quota_limit: number | null;
   quota_period: "day" | "month" | "request" | null;
+  supports_multiple_keys: number;
   icon: string | null;
   docs_url: string | null;
   sort_order: number;
@@ -94,8 +95,8 @@ export function createTool(input: NewTool): Tool {
     `INSERT INTO tool_configs (
       id, type, name, display_name, description, api_key_encrypted,
       endpoint, config_json, status, icon, docs_url, sort_order,
-      quota_limit, quota_period, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      quota_limit, quota_period, supports_multiple_keys, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     input.type,
@@ -111,6 +112,7 @@ export function createTool(input: NewTool): Tool {
     input.sort_order ?? 100,
     input.quota_limit ?? null,
     input.quota_period ?? null,
+    (input as any).supports_multiple_keys ?? 0,
     now,
     now
   );
@@ -177,6 +179,10 @@ export function updateTool(
   if (patch.quota_period !== undefined) {
     fields.push("quota_period = ?");
     values.push(patch.quota_period);
+  }
+  if ((patch as any).supports_multiple_keys !== undefined) {
+    fields.push("supports_multiple_keys = ?");
+    values.push((patch as any).supports_multiple_keys ? 1 : 0);
   }
 
   fields.push("updated_at = ?");
