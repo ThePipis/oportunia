@@ -111,14 +111,20 @@
 .light .text-white {
   color: #0f172a !important;
 }
+.light .text-slate-100 {
+  color: #0f172a !important;
+}
+.light .text-slate-200 {
+  color: #1e293b !important;
+}
 .light .text-slate-300 {
-  color: #475569 !important;
+  color: #334155 !important;
 }
 .light .text-slate-400 {
-  color: #64748b !important;
+  color: #475569 !important;
 }
 .light .text-slate-500 {
-  color: #94a3b8 !important;
+  color: #64748b !important;
 }
 
 /* Background overrides for hardcoded dark classes */

@@ -26,6 +26,12 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
+        {/* FOUC prevention: read theme + locale from localStorage BEFORE React hydrates */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('oportunia-theme');var h=document.documentElement;if(t==='light'){h.classList.remove('dark');h.classList.add('light');}else{h.classList.add('dark');}var l=localStorage.getItem('oportunia-locale');if(l==='en'){h.lang='en';}else{h.lang='es';}}catch(e){document.documentElement.classList.add('dark');}})();`,
+          }}
+        />
         {/* Google Fonts: Inter (UI) + Outfit (display) */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
