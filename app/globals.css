@@ -127,6 +127,59 @@
   color: #64748b !important;
 }
 
+/* Sky (used for active links + accents) — needs darker tone on light bg */
+.light .text-sky-200,
+.light .text-sky-300 {
+  color: #0369a1 !important;
+}
+.light .text-sky-400 {
+  color: #0284c7 !important;
+}
+.light .text-emerald-200,
+.light .text-emerald-300 {
+  color: #047857 !important;
+}
+.light .text-amber-200,
+.light .text-amber-300 {
+  color: #b45309 !important;
+}
+.light .text-violet-200,
+.light .text-violet-300 {
+  color: #6d28d9 !important;
+}
+
+/* Active nav link backgrounds — keep accent visible on light bg */
+.light .bg-sky-500\/20 {
+  background-color: rgba(14, 165, 233, 0.15) !important;
+}
+.light .bg-sky-500\/15 {
+  background-color: rgba(14, 165, 233, 0.12) !important;
+}
+.light .bg-emerald-500\/15 {
+  background-color: rgba(16, 185, 129, 0.12) !important;
+}
+.light .bg-amber-500\/15 {
+  background-color: rgba(245, 158, 11, 0.12) !important;
+}
+.light .bg-violet-500\/15 {
+  background-color: rgba(139, 92, 246, 0.12) !important;
+}
+.light .border-sky-500\/40 {
+  border-color: rgba(14, 165, 233, 0.4) !important;
+}
+.light .border-sky-500\/30 {
+  border-color: rgba(14, 165, 233, 0.3) !important;
+}
+.light .border-amber-500\/30 {
+  border-color: rgba(245, 158, 11, 0.4) !important;
+}
+.light .border-emerald-500\/30 {
+  border-color: rgba(16, 185, 129, 0.3) !important;
+}
+.light .border-red-500\/30 {
+  border-color: rgba(239, 68, 68, 0.4) !important;
+}
+
 /* Background overrides for hardcoded dark classes */
 .light .bg-slate-950\/80 {
   background-color: rgba(255, 255, 255, 0.9) !important;
