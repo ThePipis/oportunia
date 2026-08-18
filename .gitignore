@@ -53,3 +53,9 @@ temp/
 # Backup/cached build directories (used during dev iteration)
 .next.old*/
 .next.bak/
+.next.broken*/
+
+# Local dev server scripts (workaround for 30-min background task limit)
+dev-loop.cmd
+dev-loop.ps1
+"Instalar acceso directo desktop.ps1"
