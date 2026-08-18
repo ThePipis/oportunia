@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { I18nProvider } from "@/lib/i18n/client";
+import { TopNav } from "@/components/layout/top-nav";
 
 export const metadata: Metadata = {
   title: "OportunIA - Radar de Clientes de Alto Valor",
@@ -38,7 +39,10 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <I18nProvider>{children}</I18nProvider>
+        <I18nProvider>
+          <TopNav />
+          {children}
+        </I18nProvider>
       </body>
     </html>
   );

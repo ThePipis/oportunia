@@ -117,7 +117,7 @@ async function run() {
     gapOperativo: hvacScore.breakdown.gapOperativo,
     fitNegocio: hvacScore.breakdown.fitNegocio,
     senalesCompra: hvacScore.breakdown.senalesCompra,
-    proximidade: hvacScore.breakdown.proximidad,
+    proximidad: hvacScore.breakdown.proximidad,
     sector: "hvac", primaryType: "HVAC contractor",
     is24_7Emergency: true, hasGoogleRating: true, reviewCount: 25,
     hasWebsiteCrawled: true, hasChat: false, hasBooking: false,
