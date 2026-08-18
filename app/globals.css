@@ -74,6 +74,158 @@
   }
 }
 
+/* =====================================================================
+ * THEME OVERRIDES
+ * Invert Tailwind's slate color scale + override common patterns
+ * so light mode actually looks light. Works without touching 80+ files.
+ * ===================================================================== */
+.light {
+  /* Invert slate scale: dark→light, light→dark */
+  --tw-color-slate-50: 15 23 42;   /* was white-ish, now dark */
+  --tw-color-slate-100: 30 41 59;
+  --tw-color-slate-200: 51 65 85;
+  --tw-color-slate-300: 71 85 105;
+  --tw-color-slate-400: 100 116 139;
+  --tw-color-slate-500: 148 163 184;
+  --tw-color-slate-600: 203 213 225;
+  --tw-color-slate-700: 226 232 240;
+  --tw-color-slate-800: 241 245 249;
+  --tw-color-slate-900: 248 250 252;
+  --tw-color-slate-950: 255 255 255;
+
+  /* White becomes dark text in light mode */
+  --tw-color-white: 15 23 42;
+}
+
+.light body {
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+  color: #0f172a;
+}
+
+/* Override the radial gradient background for landing/light pages */
+.light .bg-gradient-radial {
+  background: linear-gradient(180deg, #eff6ff 0%, #ffffff 70%) !important;
+}
+
+/* Make all text that's hardcoded as white in dark mode readable in light */
+.light .text-white {
+  color: #0f172a !important;
+}
+.light .text-slate-300 {
+  color: #475569 !important;
+}
+.light .text-slate-400 {
+  color: #64748b !important;
+}
+.light .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+/* Background overrides for hardcoded dark classes */
+.light .bg-slate-950\/80 {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+.light .bg-slate-950 {
+  background-color: #ffffff !important;
+}
+.light .bg-slate-900\/60 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border-color: #e2e8f0 !important;
+}
+.light .bg-slate-900\/40 {
+  background-color: rgba(248, 250, 252, 0.9) !important;
+}
+.light .bg-slate-900\/50 {
+  background-color: rgba(248, 250, 252, 0.95) !important;
+  border-color: #e2e8f0 !important;
+}
+.light .bg-slate-900\/30 {
+  background-color: rgba(241, 245, 249, 0.9) !important;
+}
+.light .bg-slate-800\/50 {
+  background-color: rgba(241, 245, 249, 0.95) !important;
+  color: #1e293b !important;
+}
+.light .bg-slate-800 {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+}
+
+/* Borders */
+.light .border-white\/5,
+.light .border-white\/10 {
+  border-color: rgba(15, 23, 42, 0.1) !important;
+}
+.light .border-white\/20 {
+  border-color: rgba(15, 23, 42, 0.15) !important;
+}
+
+/* Inputs */
+.light input,
+.light textarea,
+.light select {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Tables */
+.light table th {
+  color: #0369a1 !important;
+}
+.light table td {
+  color: #0f172a !important;
+  border-color: rgba(15, 23, 42, 0.06) !important;
+}
+.light table tr:hover td {
+  background: rgba(15, 23, 42, 0.02) !important;
+}
+
+/* Buttons (override variant styles) */
+.light button.btn-table {
+  background: rgba(14, 165, 233, 0.1) !important;
+  color: #0369a1 !important;
+  border-color: rgba(14, 165, 233, 0.3) !important;
+}
+.light button.btn-table:hover {
+  background: #0ea5e9 !important;
+  color: #ffffff !important;
+}
+
+/* Toast */
+.light .toast {
+  background: linear-gradient(135deg, #10b981 0%, #0ea5e9 100%) !important;
+  color: #ffffff !important;
+}
+
+/* Card-glass style */
+.light .card-glass {
+  background: rgba(255, 255, 255, 0.85) !important;
+  border-color: rgba(15, 23, 42, 0.08) !important;
+  backdrop-filter: blur(16px);
+}
+
+/* Gradient text in light */
+.light .text-gradient-brand {
+  background: linear-gradient(90deg, #0f172a 0%, #475569 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
+}
+
+/* Brand gradient stays the same but ensure contrast */
+.light .from-orange-500,
+.light .to-orange-700 {
+  /* same colors, they look good on light too */
+}
+
+/* Skeleton */
+.light .animate-pulse {
+  opacity: 0.6;
+}
+
+
 @layer components {
   /* Card glass-morphism style */
   .card-glass {
