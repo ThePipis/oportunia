@@ -1,12 +1,16 @@
 /**
  * API: /api/tools/[id]/keys/[keyId]/health
- * POST - ping a specific Gemini account
+ * POST - ping a specific account (works for any tool, not just Gemini).
+ *
+ * The right protocol is inferred from the tool name in lib/tools/ping.ts.
+ * Updates the account's status based on the result (rate_limited on 429,
+ * error on 4xx, success clears any prior error).
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { getAccount, markAccountUsed, markAccountError, markAccountRateLimited } from "@/lib/db/repositories/tool-api-keys";
-import { pingGeminiAccount, classifyError } from "@/lib/llm/router";
-import { getTool } from "@/lib/db/repositories/tools";
+import { pingAccount } from "@/lib/tools/ping";
+import { classifyError } from "@/lib/tools/error-classifier";
 
 export async function POST(
   _request: NextRequest,
@@ -17,16 +21,16 @@ export async function POST(
   if (!account) {
     return NextResponse.json({ error: "Account not found" }, { status: 404 });
   }
-  const tool = getTool(account.tool_id);
 
-  const result = await pingGeminiAccount(keyId);
+  const result = await pingAccount(keyId);
 
   if (result.ok) {
     markAccountUsed(account.id);
     return NextResponse.json({
       ok: true,
       latencyMs: result.latencyMs,
-      account: { ...account, api_key_encrypted: undefined },
+      meta: result.meta,
+      account: { ...getAccount(keyId), api_key_encrypted: undefined },
     });
   }
 

@@ -1,11 +1,16 @@
 /**
  * Yelp Fusion API client.
  * Free tier: 5,000 calls/day.
+ *
+ * Supports multi-account via withToolFallback. Create multiple Yelp apps
+ * (one per account) at https://www.yelp.com/developers/v3/manage_app and
+ * add each API key in /tools.
  */
 
-import { incrementQuota } from "@/lib/db/repositories/tools";
+import { withToolFallback, type FallbackResult } from "./fallback";
 
 const API_BASE = "https://api.yelp.com/v3";
+const TOOL_NAME = "yelp-fusion";
 
 export interface YelpBusiness {
   id: string;
@@ -44,19 +49,21 @@ export interface YelpReview {
   user: { id: string; profile_url: string; image_url?: string; name: string };
 }
 
+export interface YelpBusinessSearchParams {
+  term?: string;
+  location?: string;
+  latitude?: number;
+  longitude?: number;
+  radius?: number; // meters
+  categories?: string;
+  limit?: number;
+  price?: string; // "1,2,3,4"
+  open_now?: boolean;
+}
+
 export async function businessSearch(
   apiKey: string,
-  params: {
-    term?: string;
-    location?: string;
-    latitude?: number;
-    longitude?: number;
-    radius?: number; // meters
-    categories?: string;
-    limit?: number;
-    price?: string; // "1,2,3,4"
-    open_now?: boolean;
-  }
+  params: YelpBusinessSearchParams
 ): Promise<{ businesses: YelpBusiness[]; total: number }> {
   const qs = new URLSearchParams();
   if (params.term) qs.set("term", params.term);
@@ -72,7 +79,6 @@ export async function businessSearch(
   const res = await fetch(`${API_BASE}/businesses/search?${qs}`, {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
-  incrementQuota("yelp-fusion", 1);
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
     throw new Error(`Yelp search HTTP ${res.status}: ${errText.slice(0, 300)}`);
@@ -91,11 +97,26 @@ export async function businessReviews(
   const res = await fetch(`${API_BASE}/businesses/${businessId}/reviews`, {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
-  incrementQuota("yelp-fusion", 1);
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
     throw new Error(`Yelp reviews HTTP ${res.status}: ${errText.slice(0, 300)}`);
   }
   const data = await res.json();
   return data.reviews ?? [];
+}
+
+// ---------------------------------------------------------------------------
+// High-level (multi-account) — use these from API routes
+// ---------------------------------------------------------------------------
+
+export function businessSearchWithFallback(
+  params: YelpBusinessSearchParams
+): Promise<FallbackResult<{ businesses: YelpBusiness[]; total: number }>> {
+  return withToolFallback(TOOL_NAME, (apiKey) => businessSearch(apiKey, params));
+}
+
+export function businessReviewsWithFallback(
+  businessId: string
+): Promise<FallbackResult<YelpReview[]>> {
+  return withToolFallback(TOOL_NAME, (apiKey) => businessReviews(apiKey, businessId));
 }

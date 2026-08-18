@@ -43,11 +43,23 @@ function main() {
     console.log("   ↪ tool_configs.supports_multiple_keys añadida");
   }
 
-  // Marcar gemini-pro como multi-key para instalaciones existentes
-  db.prepare(
+  // Marcar tools multi-key para instalaciones existentes
+  const multiKeyTools = [
+    "gemini-pro",
+    "google-places",
+    "yelp-fusion",
+    "tavily",
+    "firecrawl",
+    "brave-search",
+  ];
+  const stmt = db.prepare(
     `UPDATE tool_configs SET supports_multiple_keys = 1
-     WHERE name = 'gemini-pro' AND supports_multiple_keys = 0`
-  ).run();
+     WHERE name = ? AND supports_multiple_keys = 0`
+  );
+  for (const name of multiKeyTools) {
+    const r = stmt.run(name);
+    if (r.changes > 0) console.log(`   ↪ ${name} marcado como multi-cuenta`);
+  }
 
   // Migrar API keys legacy (gemini-pro) al nuevo esquema multi-cuenta
   const migrated = migrateLegacyKeysToAccounts();

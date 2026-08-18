@@ -2,13 +2,22 @@
  * API: /api/radar/search
  * POST - search for businesses matching criteria
  * Body: { query, location?, radiusMiles?, maxResults? }
+ *
+ * Uses the multi-account Google Places fallback. If you have multiple
+ * GCP projects configured in /tools, the smart router picks the one with
+ * the most remaining quota for each request, and automatically falls back
+ * on 429/5xx errors.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { textSearch, placeDetails } from "@/lib/tools/google-places-full";
+import {
+  textSearchWithFallback,
+  placeDetailsWithFallback,
+  type PlaceSearchResult,
+  type PlaceDetails,
+} from "@/lib/tools/google-places-full";
 import { upsertBusiness } from "@/lib/db/repositories/businesses";
 import { haversineMiles, milesToMeters } from "@/lib/utils/distance";
-import { getTool } from "@/lib/db/repositories/tools";
 
 interface SearchRequest {
   /** e.g. "plumbers in Corona CA" or "HVAC near me" */
@@ -31,17 +40,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const tool = getTool("google-places");
-    if (!tool?.api_key_encrypted) {
-      return NextResponse.json(
-        {
-          error:
-            "Google Places API key no configurada. Ve a /tools y agrégala.",
-        },
-        { status: 400 }
-      );
-    }
-    const apiKey = tool.api_key_encrypted;
     const radiusMiles = body.radiusMiles ?? 5;
     const maxResults = body.maxResults ?? 20;
 
@@ -55,36 +53,59 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    // Step 1: Text Search
-    const searchResults = await textSearch(apiKey, {
+    // Step 1: Text Search (with multi-account fallback)
+    const searchResult = await textSearchWithFallback({
       query: body.query,
       locationBias,
       maxResultCount: maxResults,
       regionCode: "US",
     });
 
+    if (!searchResult.ok) {
+      return NextResponse.json(
+        {
+          error: searchResult.error,
+          per_account: searchResult.perAccount,
+        },
+        { status: 503 }
+      );
+    }
+
+    const searchResults: PlaceSearchResult[] = searchResult.data;
     if (searchResults.length === 0) {
       return NextResponse.json({
         results: [],
         saved: 0,
+        used_account: searchResult.usedAccountId,
         message: "No se encontraron negocios.",
       });
     }
 
-    // Step 2: For each result, fetch details (parallel, capped at 10 to avoid rate limits)
+    // Step 2: For each result, fetch details in parallel.
+    // Each detail call also uses the multi-account fallback independently,
+    // so a single rate-limited account doesn't kill the whole batch.
     const detailsToFetch = searchResults.slice(0, Math.min(10, maxResults));
     const detailedResults = await Promise.allSettled(
       detailsToFetch.map(async (sr) => {
-        const details = await placeDetails(apiKey, sr.id, { includeReviews: false });
-        return { searchResult: sr, details };
+        const detailResult = await placeDetailsWithFallback(sr.id, { includeReviews: false });
+        if (!detailResult.ok) {
+          // Don't fail the whole batch — return a synthetic null and let the
+          // search-result row stand on its own.
+          return { searchResult: sr, details: null as PlaceDetails | null, error: detailResult.error };
+        }
+        return { searchResult: sr, details: detailResult.data, error: null as string | null };
       })
     );
 
     // Step 3: Save to DB
     const savedBusinesses: any[] = [];
+    const accountsUsed = new Set<string>();
+    if (searchResult.usedAccountId) accountsUsed.add(searchResult.usedAccountId);
+
     for (const result of detailedResults) {
-      if (result.status !== "fulfilled" || !result.value.details) continue;
+      if (result.status !== "fulfilled") continue;
       const { searchResult: sr, details } = result.value;
+      if (!details) continue;
 
       // Compute distance if we have coordinates and origin
       let distanceMiles: number | undefined;
@@ -141,6 +162,8 @@ export async function POST(request: NextRequest) {
       results: savedBusinesses,
       saved: savedBusinesses.length,
       total_found: searchResults.length,
+      used_account: searchResult.usedAccountId,
+      used_account_label: searchResult.usedAccountLabel,
     });
   } catch (error: any) {
     console.error("POST /api/radar/search failed:", error);
@@ -164,7 +187,6 @@ function parseAddress(formatted: string): {
   if (!formatted) return {};
   const parts = formatted.split(",").map((p) => p.trim());
 
-  // Heuristic: last part is "USA" (skip), second-to-last is "STATE ZIP"
   const result: { street?: string; city?: string; state?: string; zip?: string } = {};
   if (parts.length >= 1) result.street = parts[0];
   if (parts.length >= 2) result.city = parts[1];

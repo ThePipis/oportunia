@@ -24,14 +24,19 @@
 
 import { callLocalLLM, type LLMRequest, type LLMResponse } from "./local-client";
 import { callGemini } from "./gemini-client";
-import { getTool, incrementQuota, setToolStatus } from "@/lib/db/repositories/tools";
+import { getTool, listTools, incrementQuota, setToolStatus } from "@/lib/db/repositories/tools";
 import {
+  listAccounts,
   listActiveAccounts,
   markAccountUsed,
   markAccountRateLimited,
   markAccountError,
   getAccount,
 } from "@/lib/db/repositories/tool-api-keys";
+import { classifyError } from "@/lib/tools/error-classifier";
+
+// Re-export so existing consumers of "from @/lib/llm/router" still work
+export { classifyError } from "@/lib/tools/error-classifier";
 
 export type LLMMode = "local" | "gemini" | "auto";
 
@@ -90,54 +95,7 @@ function needsGemini(request: LLMRequest, opts: RouteOptions): boolean {
 function findGeminiTool() {
   const direct = getTool(GEMINI_TOOL_ID_FALLBACK);
   if (direct) return direct;
-  // Fall back to scanning
-  const { listTools } = require("@/lib/db/repositories/tools");
   return listTools().find((t: any) => t.name === GEMINI_TOOL_NAME) ?? null;
-}
-
-/**
- * Classify a Gemini API error so we know whether to fall back to the next
- * account or fail the whole call.
- *
- * Returns one of:
- *   - "transient"     → network, 5xx, timeout: try next, no penalty
- *   - "rate_limit"    → 429 / RESOURCE_EXHAUSTED: try next, cool down
- *   - "permanent"     → 400 bad request, 401/403 auth: try next BUT mark
- *                       the current account as 'error' (admin must fix)
- *   - "fatal"         → configuration / programmer error: don't try others
- */
-export function classifyError(err: unknown): {
-  kind: "transient" | "rate_limit" | "permanent" | "fatal";
-  message: string;
-} {
-  const msg = err instanceof Error ? err.message : String(err);
-  // Match patterns our gemini-client emits
-  //   "Gemini HTTP 429: {...}"
-  //   "Gemini HTTP 400: {...}"
-  //   "Gemini HTTP 500: ..."
-  const statusMatch = msg.match(/HTTP\s+(\d{3})/);
-  const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
-
-  if (status === 429) return { kind: "rate_limit", message: msg };
-  if (status === 408 || status === 500 || status === 502 || status === 503 || status === 504) {
-    return { kind: "transient", message: msg };
-  }
-  if (status === 400) {
-    // 400 is usually a malformed request — but with multi-account it can also
-    // happen if the key has been disabled. Try next, mark error to be safe.
-    return { kind: "permanent", message: msg };
-  }
-  if (status === 401 || status === 403) {
-    return { kind: "permanent", message: msg };
-  }
-  if (/RESOURCE_EXHAUSTED|QUOTA_EXCEEDED|rate.?limit|quota/i.test(msg)) {
-    return { kind: "rate_limit", message: msg };
-  }
-  if (/ENOTFOUND|ECONNREFUSED|ETIMEDOUT|fetch failed|network|aborted/i.test(msg)) {
-    return { kind: "transient", message: msg };
-  }
-  // Unknown — treat as transient (try the next account) but don't mark error
-  return { kind: "transient", message: msg };
 }
 
 /**

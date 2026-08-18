@@ -1,11 +1,16 @@
 /**
  * Brave Search API client.
  * Free tier: 2,000 queries/month.
+ *
+ * Multi-account: each account is a separate Brave Search API subscription
+ * (free or paid). Add N keys in /tools and the fallback will distribute
+ * requests across them.
  */
 
-import { incrementQuota } from "@/lib/db/repositories/tools";
+import { withToolFallback, type FallbackResult } from "./fallback";
 
 const API_BASE = "https://api.search.brave.com/res/v1";
+const TOOL_NAME = "brave-search";
 
 export interface BraveSearchResult {
   type: "news" | "web" | "video";
@@ -44,10 +49,20 @@ export async function webSearch(
       Accept: "application/json",
     },
   });
-  incrementQuota("brave-search", 1);
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
     throw new Error(`Brave search HTTP ${res.status}: ${errText.slice(0, 300)}`);
   }
   return await res.json();
+}
+
+export function webSearchWithFallback(
+  query: string,
+  options: {
+    count?: number;
+    freshness?: "pd" | "pw" | "pm" | "py";
+    safesearch?: "strict" | "moderate" | "off";
+  } = {}
+): Promise<FallbackResult<BraveSearchResponse>> {
+  return withToolFallback(TOOL_NAME, (apiKey) => webSearch(apiKey, query, options));
 }
