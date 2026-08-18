@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "@/components/map/leaflet.css";
 import { I18nProvider } from "@/lib/i18n/client";
 import { TopNav } from "@/components/layout/top-nav";
 

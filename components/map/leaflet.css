@@ -1,0 +1,93 @@
+/* Leaflet base styles - imported here so Next.js can bundle them */
+@import "leaflet/dist/leaflet.css";
+@import "leaflet.markercluster/dist/MarkerCluster.css";
+@import "leaflet.markercluster/dist/MarkerCluster.Default.css";
+
+/* Map container */
+.oportunia-map {
+  height: 100%;
+  width: 100%;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  z-index: 0;
+}
+
+/* Custom marker colors for business categories */
+.leaflet-marker-icon.business-default {
+  filter: hue-rotate(180deg);
+}
+
+/* Custom popup style for opportunities */
+.oportunia-popup .leaflet-popup-content-wrapper {
+  background: #1e293b;
+  color: #f1f5f9;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+.oportunia-popup .leaflet-popup-content {
+  margin: 0.75rem;
+  font-family: inherit;
+}
+.oportunia-popup .leaflet-popup-tip {
+  background: #1e293b;
+}
+.oportunia-popup a {
+  color: #38bdf8;
+  text-decoration: none;
+}
+.oportunia-popup a:hover {
+  text-decoration: underline;
+}
+
+/* Cluster customization (match our brand) */
+.marker-cluster {
+  background-clip: padding-box;
+  border-radius: 20px;
+}
+.marker-cluster div {
+  background: rgba(14, 165, 233, 0.85);
+  color: white;
+  font-weight: 700;
+  border-radius: 16px;
+  font-family: inherit;
+}
+.marker-cluster-small {
+  background: rgba(14, 165, 233, 0.5);
+}
+.marker-cluster-small div {
+  background: rgba(14, 165, 233, 0.7);
+}
+.marker-cluster-medium {
+  background: rgba(245, 158, 11, 0.5);
+}
+.marker-cluster-medium div {
+  background: rgba(245, 158, 11, 0.7);
+}
+.marker-cluster-large {
+  background: rgba(239, 68, 68, 0.5);
+}
+.marker-cluster-large div {
+  background: rgba(239, 68, 68, 0.7);
+}
+
+/* Center pin (the origin marker) */
+.center-pin {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  background: #f97316;
+  border: 3px solid white;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+.center-pin::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  background: white;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}

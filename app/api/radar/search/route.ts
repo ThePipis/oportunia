@@ -155,6 +155,10 @@ export async function POST(request: NextRequest) {
         review_count: business.review_count,
         distance_miles: business.distance_miles,
         primary_type: business.primary_type,
+        lat: business.lat,
+        lng: business.lng,
+        phone: business.phone,
+        website: business.website,
       });
     }
 

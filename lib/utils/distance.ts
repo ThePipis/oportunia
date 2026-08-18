@@ -29,3 +29,7 @@ export function haversineMiles(
 export function milesToMeters(miles: number): number {
   return miles * 1609.344;
 }
+
+export function metersToMiles(meters: number): number {
+  return meters / 1609.344;
+}
