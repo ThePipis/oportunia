@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { useT } from "@/lib/i18n/client";
-import { LanguageToggle } from "@/components/layout/language-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -147,9 +146,7 @@ export default function ProposalPage({
               {proposal.proposalNumber} · {proposal.proposalDate} · Válida hasta {proposal.validUntil}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <LanguageToggle />
-            <Button onClick={downloadPDF} size="lg">
+          <div className="flex items-center gap-2"><Button onClick={downloadPDF} size="lg">
               📥 Descargar PDF
             </Button>
           </div>

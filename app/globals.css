@@ -51,6 +51,10 @@
     @apply border-white/10;
   }
 
+  .light * {
+    @apply border-slate-200;
+  }
+
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -60,6 +64,8 @@
     @apply bg-[hsl(var(--background))] text-[hsl(var(--foreground))];
     font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     min-height: 100vh;
+    /* Smooth transition when toggling theme */
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   h1, h2, h3, h4, h5, h6 {

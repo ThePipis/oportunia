@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { useT } from "@/lib/i18n/client";
-import { LanguageToggle } from "@/components/layout/language-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -73,9 +72,7 @@ export default function SettingsPage() {
             <p className="text-sm text-slate-400 mt-2">
               Configuración de tu empresa, dirección de origen, y preferencias.
             </p>
-          </div>
-          <LanguageToggle />
-        </div>
+          </div></div>
 
         <div className="flex items-center gap-3 text-sm">
           <a href="/" className="text-sky-400 hover:text-sky-300">← Inicio</a>

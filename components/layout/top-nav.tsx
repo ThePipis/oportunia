@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useT } from "@/lib/i18n/client";
 import { LanguageToggle } from "./language-toggle";
+import { ThemeToggle } from "./theme-toggle";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -68,8 +69,9 @@ export function TopNav() {
           })}
         </nav>
 
-        {/* Right: lang toggle */}
+        {/* Right: theme + lang toggles */}
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           <LanguageToggle />
         </div>
       </div>

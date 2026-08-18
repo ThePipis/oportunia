@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { LanguageToggle } from "@/components/layout/language-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -63,9 +62,7 @@ export default function CRMPage() {
             <p className="text-sm text-slate-400 mt-1">
               Click en una card para mover al siguiente stage. Lead → Contactado → Reunión → Propuesta → Cerrado.
             </p>
-          </div>
-          <LanguageToggle />
-        </div>
+          </div></div>
 
         <div className="flex items-center gap-3 text-sm">
           <a href="/" className="text-sky-400">← Inicio</a>

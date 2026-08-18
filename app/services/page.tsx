@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { useT } from "@/lib/i18n/client";
-import { LanguageToggle } from "@/components/layout/language-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -109,9 +108,7 @@ export default function ServicesPage() {
             <p className="text-sm text-slate-400 mt-2 max-w-2xl">
               Los 12 servicios que OportunIA matchea con cada negocio. Editá nombres, descripciones, precios y pitches.
             </p>
-          </div>
-          <LanguageToggle />
-        </div>
+          </div></div>
 
         {/* Nav */}
         <div className="flex items-center gap-3 text-sm">

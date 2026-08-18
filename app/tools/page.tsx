@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { useT } from "@/lib/i18n/client";
-import { LanguageToggle } from "@/components/layout/language-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -146,9 +145,7 @@ export default function ToolsPage() {
             <p className="text-sm text-slate-400 mt-2 max-w-2xl">
               {t("tools.subtitle")}
             </p>
-          </div>
-          <LanguageToggle />
-        </div>
+          </div></div>
 
         {/* Back to home */}
         <div>

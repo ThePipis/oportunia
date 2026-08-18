@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { useT } from "@/lib/i18n/client";
-import { LanguageToggle } from "@/components/layout/language-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BusinessHeader } from "@/components/business/business-header";
@@ -223,9 +222,7 @@ export default function BusinessProfilePage({
             <p className="text-sm text-slate-400 mt-1">
               Score 5D, servicios matcheados, y talking points con IA
             </p>
-          </div>
-          <LanguageToggle />
-        </div>
+          </div></div>
 
         {/* Nav */}
         <div className="flex items-center gap-3 text-sm">

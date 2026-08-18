@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { LanguageToggle } from "@/components/layout/language-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -65,9 +64,7 @@ export default function OnboardingPage() {
                 }`}
               />
             ))}
-          </div>
-          <LanguageToggle />
-        </div>
+          </div></div>
 
         {/* Step card */}
         <Card>

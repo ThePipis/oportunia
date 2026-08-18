@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { LanguageToggle } from "@/components/layout/language-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -57,9 +56,7 @@ export default function ListsPage() {
             <h1 className="text-3xl font-bold font-display text-gradient-brand">Listas</h1>
             <p className="text-sm text-slate-400 mt-1">Agrupá prospectos en listas temáticas (ej. "Q3-2026-Outreach").</p>
           </div>
-          <div className="flex items-center gap-2">
-            <LanguageToggle />
-            <Button onClick={() => setShowNew(true)}>+ Nueva lista</Button>
+          <div className="flex items-center gap-2"><Button onClick={() => setShowNew(true)}>+ Nueva lista</Button>
           </div>
         </div>
 

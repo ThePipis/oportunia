@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { useT } from "@/lib/i18n/client";
-import { LanguageToggle } from "@/components/layout/language-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -128,9 +127,7 @@ export default function RadarPage() {
             <p className="text-sm text-slate-400 mt-2 max-w-2xl">
               {t("radar.subtitle")}
             </p>
-          </div>
-          <LanguageToggle />
-        </div>
+          </div></div>
 
         {/* Nav */}
         <div className="flex items-center gap-3 text-sm">

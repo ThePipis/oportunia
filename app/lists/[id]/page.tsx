@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { LanguageToggle } from "@/components/layout/language-toggle";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -73,9 +72,7 @@ export default function ListDetailPage({
             {data.list.description && <p className="text-sm text-slate-400 mt-1">{data.list.description}</p>}
             <p className="text-xs text-slate-500 mt-2">{data.items.length} items</p>
           </div>
-          <div className="flex items-center gap-2">
-            <LanguageToggle />
-            <Button onClick={exportCSV} variant="secondary" size="sm">📥 Exportar CSV</Button>
+          <div className="flex items-center gap-2"><Button onClick={exportCSV} variant="secondary" size="sm">📥 Exportar CSV</Button>
           </div>
         </div>
 
