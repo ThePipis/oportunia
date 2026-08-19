@@ -53,9 +53,21 @@ export default function AddToCrmButton({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ business_id: businessId, stage }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `Error ${res.status}`);
+        throw new Error(data.error || `Error ${res.status}`);
+      }
+      // /api/crm/move returns { added: false, duplicate: true } when
+      // the business is already in the requested stage — a "Ya está"
+      // outcome that should be reflected in the button feedback
+      // (amber outline instead of emerald filled) and the tooltip.
+      if (data.added === false || data.duplicate === true) {
+        setStatus("duplicate");
+        // Keep this short so the button width stays close to the
+        // idle "Pipeline" label (8 chars vs 11) and we don't break
+        // the action-bar layout on the profile page.
+        setMessage("En pipeline");
+        return;
       }
       setStatus("added");
       // Intentionally DO NOT change the visible label here. The visual
@@ -84,16 +96,20 @@ export default function AddToCrmButton({
   const ariaLabel =
     status === "added"
       ? `${businessName ?? "Negocio"} agregado al pipeline`
-      : `Agregar ${businessName ?? "negocio"} al pipeline de ventas`;
+      : status === "duplicate"
+        ? `${businessName ?? "Negocio"} ya está en el pipeline`
+        : `Agregar ${businessName ?? "negocio"} al pipeline de ventas`;
 
   // Tooltip text per state. We don't reuse `message` for the success
   // state any more (see add() above for the why) so we set it explicitly.
   const titleText =
     status === "added"
       ? "✓ Agregado al pipeline"
-      : status === "error"
-        ? `Error: ${message}`
-        : "Agregar al pipeline de ventas";
+      : status === "duplicate"
+        ? "ℹ Ya está en el pipeline"
+        : status === "error"
+          ? `Error: ${message}`
+          : "Agregar al pipeline de ventas";
 
   return (
     <button
@@ -120,6 +136,8 @@ export default function AddToCrmButton({
         />
       ) : status === "added" ? (
         <span aria-hidden="true">✓</span>
+      ) : status === "duplicate" ? (
+        <span aria-hidden="true">ℹ</span>
       ) : status === "error" ? (
         <span aria-hidden="true">⚠</span>
       ) : (
@@ -127,10 +145,13 @@ export default function AddToCrmButton({
       )}
       {!compact && (
         <span>
-          {/* Label stays the same in all non-error states so the
-              button width is stable and there is no duplicate-icon
-              artefact. The icon + colour change is the feedback. */}
-          {status === "error" ? message : "Pipeline"}
+          {/* Label stays the same in idle/added (so the button width
+              doesn't grow) and switches to the duplicate or error
+              message when those states are active. The icon + colour
+              change carries the feedback for "added". */}
+          {status === "error" || status === "duplicate"
+            ? message
+            : "Pipeline"}
         </span>
       )}
     </button>

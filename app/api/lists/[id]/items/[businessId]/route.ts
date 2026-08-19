@@ -39,8 +39,14 @@ export async function POST(
       // empty body is fine
     }
 
-    addToList(id, businessId, notes);
-    return NextResponse.json({ ok: true, listId: id, businessId }, { status: 201 });
+    const { added } = addToList(id, businessId, notes);
+    // 201 for a fresh add, 200 for a no-op duplicate — the body always
+    // includes `added: boolean` so the AddToListButton popover can show
+    // the right feedback ("Agregado" vs "Ya está en esta lista").
+    return NextResponse.json(
+      { ok: true, added, listId: id, businessId },
+      { status: added ? 201 : 200 }
+    );
   } catch (error: any) {
     console.error("POST /api/lists/[id]/items/[businessId] failed:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });

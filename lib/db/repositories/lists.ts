@@ -51,20 +51,45 @@ export function deleteList(id: string): boolean {
   return result.changes > 0;
 }
 
-export function addToList(listId: string, businessId: string, notes?: string): void {
+/**
+ * Add a business to a list. Returns whether the row was newly inserted.
+ * The (list_id, business_id) PRIMARY KEY means a duplicate add is
+ * detected by SQLite as a UNIQUE conflict; we use INSERT OR IGNORE so
+ * the call is idempotent and the caller's `changes()` count tells us
+ * whether we actually added the row.
+ *
+ * Note: a business can belong to MANY lists, so this only checks the
+ * specific (listId, businessId) pair, not whether the business is in
+ * any other list.
+ */
+export function addToList(listId: string, businessId: string, notes?: string): { added: boolean } {
   const db = getDb();
   const now = Math.floor(Date.now() / 1000);
   const maxPos = (db.prepare(`SELECT MAX(position) as m FROM list_items WHERE list_id = ?`).get(listId) as { m: number | null })?.m ?? 0;
-  db.prepare(
-    `INSERT INTO list_items (list_id, business_id, position, notes, added_at) VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(list_id, business_id) DO UPDATE SET notes = excluded.notes`
+  const result = db.prepare(
+    `INSERT OR IGNORE INTO list_items (list_id, business_id, position, notes, added_at) VALUES (?, ?, ?, ?, ?)`
   ).run(listId, businessId, maxPos + 1, notes ?? null, now);
+  return { added: result.changes > 0 };
 }
 
 export function removeFromList(listId: string, businessId: string): boolean {
   const db = getDb();
   const result = db.prepare(`DELETE FROM list_items WHERE list_id = ? AND business_id = ?`).run(listId, businessId);
   return result.changes > 0;
+}
+
+/**
+ * Cheap membership check — returns true if (listId, businessId) is in
+ * list_items. Used by the /api/lists?business_id=… endpoint to annotate
+ * each list with `contains_business` for the AddToListButton popover.
+ * A business can belong to many lists at once, so this is per-list.
+ */
+export function isBusinessInList(listId: string, businessId: string): boolean {
+  const db = getDb();
+  const row = db
+    .prepare(`SELECT 1 as hit FROM list_items WHERE list_id = ? AND business_id = ? LIMIT 1`)
+    .get(listId, businessId) as { hit: number } | undefined;
+  return !!row;
 }
 
 export function getListItems(listId: string): Array<ListItem & { business_name: string; address: string | null; city: string | null; total_score: number | null; tier: string | null }> {

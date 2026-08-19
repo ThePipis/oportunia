@@ -18,6 +18,10 @@ interface List {
   description: string | null;
   color: string;
   created_at: number;
+  /** True when this list already contains the current business.
+   *  Annotated by /api/lists?business_id=… so the popover can mark
+   *  existing memberships before the user clicks. */
+  contains_business?: boolean;
 }
 
 interface AddToListButtonProps {
@@ -35,6 +39,7 @@ type PopoverState =
   | { mode: "creating"; lists: List[]; draft: string }
   | { mode: "saving" }
   | { mode: "saved"; message: string }
+  | { mode: "duplicate"; message: string }
   | { mode: "error"; message: string };
 
 export default function AddToListButton({
@@ -48,13 +53,20 @@ export default function AddToListButton({
   const containerRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
-  // Lazy-load the lists when the popover first opens
+  // Lazy-load the lists when the popover first opens. Pass business_id
+  // so the server can annotate each list with `contains_business` —
+  // a business can live in many lists, so we mark per-list rather
+  // than globally and the popover shows a check on the ones it already
+  // belongs to.
   React.useEffect(() => {
     if (!open) return;
     if (state.mode !== "idle") return;
     let cancelled = false;
     setState({ mode: "loading" });
-    fetch("/api/lists")
+    const url = businessId
+      ? `/api/lists?business_id=${encodeURIComponent(businessId)}`
+      : "/api/lists";
+    fetch(url)
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;
@@ -68,7 +80,7 @@ export default function AddToListButton({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, businessId]);
 
   // Click-outside closes the popover
   React.useEffect(() => {
@@ -92,9 +104,9 @@ export default function AddToListButton({
     }
   }, [state.mode]);
 
-  // Auto-dismiss "saved" state after 1.5s
+  // Auto-dismiss terminal states after 1.5s
   React.useEffect(() => {
-    if (state.mode !== "saved") return;
+    if (state.mode !== "saved" && state.mode !== "duplicate") return;
     const t = setTimeout(() => setOpen(false), 1500);
     return () => clearTimeout(t);
   }, [state]);
@@ -107,11 +119,22 @@ export default function AddToListButton({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `Error ${res.status}`);
+        throw new Error(data.error || `Error ${res.status}`);
       }
-      setState({ mode: "saved", message: "✓ Agregado" });
+      // The API returns 201 + added:true for a fresh insert, or
+      // 200 + added:false when the (list, business) pair already
+      // exists. Both are normal outcomes — surface a different
+      // message so the user can see what happened.
+      if (data.added === false) {
+        setState({
+          mode: "duplicate",
+          message: "Ya está en esta lista",
+        });
+      } else {
+        setState({ mode: "saved", message: "✓ Agregado" });
+      }
     } catch (e: any) {
       setState({ mode: "error", message: e?.message || "Error" });
     }
@@ -216,33 +239,50 @@ export default function AddToListButton({
             )}
 
             {(state.mode === "ready" || state.mode === "creating") &&
-              state.lists.map((l) => (
-                <button
-                  key={l.id}
-                  type="button"
-                  onClick={() => addToExistingList(l.id)}
-                  className="w-full text-left px-3 py-2 hover:bg-slate-800/70 border-b border-white/5 last:border-b-0 flex items-center gap-2 group"
-                >
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: l.color === "sky" ? "#0ea5e9" : l.color === "emerald" ? "#10b981" : l.color === "amber" ? "#f59e0b" : l.color === "violet" ? "#8b5cf6" : l.color === "rose" ? "#f43f5e" : "#0ea5e9" }}
-                    aria-hidden="true"
-                  />
-                  <span className="flex-1 min-w-0">
-                    <span className="block text-sm text-slate-100 truncate">
-                      {l.name}
+              state.lists.map((l) => {
+                const alreadyIn = !!l.contains_business;
+                return (
+                  <button
+                    key={l.id}
+                    type="button"
+                    onClick={() => addToExistingList(l.id)}
+                    className={`w-full text-left px-3 py-2 border-b border-white/5 last:border-b-0 flex items-center gap-2 group ${
+                      alreadyIn
+                        ? "bg-amber-500/5 hover:bg-amber-500/10"
+                        : "hover:bg-slate-800/70"
+                    }`}
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: l.color === "sky" ? "#0ea5e9" : l.color === "emerald" ? "#10b981" : l.color === "amber" ? "#f59e0b" : l.color === "violet" ? "#8b5cf6" : l.color === "rose" ? "#f43f5e" : "#0ea5e9" }}
+                      aria-hidden="true"
+                    />
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm text-slate-100 truncate">
+                        {l.name}
+                      </span>
+                      {l.description && (
+                        <span className="block text-[10px] text-slate-500 truncate">
+                          {l.description}
+                        </span>
+                      )}
                     </span>
-                    {l.description && (
-                      <span className="block text-[10px] text-slate-500 truncate">
-                        {l.description}
+                    {alreadyIn ? (
+                      <span
+                        className="text-amber-300 text-xs font-medium shrink-0 inline-flex items-center gap-1"
+                        title="Este negocio ya está en esta lista"
+                      >
+                        <span aria-hidden="true">✓</span>
+                        <span>Ya está</span>
+                      </span>
+                    ) : (
+                      <span className="text-sky-400 opacity-0 group-hover:opacity-100 text-xs shrink-0">
+                        + Agregar
                       </span>
                     )}
-                  </span>
-                  <span className="text-sky-400 opacity-0 group-hover:opacity-100 text-xs">
-                    + Agregar
-                  </span>
-                </button>
-              ))}
+                  </button>
+                );
+              })}
 
             {state.mode === "saving" && (
               <div className="px-3 py-4 text-center text-xs text-slate-400">
@@ -254,6 +294,12 @@ export default function AddToListButton({
             {state.mode === "saved" && (
               <div className="px-3 py-4 text-center text-sm text-emerald-400 font-medium">
                 {state.message}
+              </div>
+            )}
+
+            {state.mode === "duplicate" && (
+              <div className="px-3 py-4 text-center text-sm text-amber-300 font-medium">
+                <span aria-hidden="true">ℹ️</span> {state.message}
               </div>
             )}
 

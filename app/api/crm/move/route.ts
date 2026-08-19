@@ -9,7 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createActivity, type PipelineStage } from "@/lib/db/repositories/activities";
+import { createActivity, listActivities, type PipelineStage } from "@/lib/db/repositories/activities";
 import { getScore } from "@/lib/db/repositories/scores";
 import { calculateScore, type ScoringInput } from "@/lib/scoring/algorithm";
 import { saveScore } from "@/lib/db/repositories/scores";
@@ -88,6 +88,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Invalid stage. Must be one of: ${VALID_STAGES.join(", ")}` }, { status: 400 });
     }
 
+    // Duplicate detection: a business is "already in the pipeline" if
+    // its latest status_change activity is in any stage. A latest
+    // pipeline_removed means it was removed and re-adding is a fresh
+    // move, not a duplicate. We only short-circuit when the latest
+    // status_change is in the SAME stage the user clicked — that way
+    // moving a Contactado card back to Lead still creates a real
+    // activity (and "added: true" feedback), while clicking the same
+    // stage twice is reported as already-there.
+    const latest = listActivities(business_id, { limit: 1 })[0];
+
+    const alreadyInThisStage =
+      latest?.type === "status_change" &&
+      latest.pipeline_stage === stage;
+
+    if (alreadyInThisStage) {
+      return NextResponse.json({
+        added: false,
+        duplicate: true,
+        message: "El negocio ya está en esta etapa del pipeline",
+        pipeline_stage: stage,
+      });
+    }
+
     const activity = createActivity({
       business_id,
       type: "status_change",
@@ -107,7 +130,12 @@ export async function POST(request: NextRequest) {
       queueMicrotask(() => rescoreBusinessSync(business_id));
     }
 
-    return NextResponse.json({ activity, rescoreQueued: !existingScore });
+    return NextResponse.json({
+      activity,
+      added: true,
+      duplicate: false,
+      rescoreQueued: !existingScore,
+    });
   } catch (error: any) {
     console.error("POST /api/crm/move failed:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
