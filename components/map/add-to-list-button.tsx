@@ -140,6 +140,43 @@ export default function AddToListButton({
     }
   };
 
+  // Inverse of addToExistingList: removes the business from a list
+  // and flips the row back to the "+ Agregar" state without closing
+  // the popover. Used by the ✕ button on rows that already show
+  // "✓ Ya está". The caller is responsible for stopPropagation on
+  // the event so the row's own onClick (which adds) doesn't fire.
+  const [removingListId, setRemovingListId] = React.useState<string | null>(null);
+  const removeFromList = async (listId: string) => {
+    if (removingListId) return;
+    setRemovingListId(listId);
+    try {
+      const res = await fetch(`/api/lists/${listId}/items/${businessId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Error ${res.status}`);
+      }
+      // Flip the row locally: the business is no longer in the list,
+      // so contains_business becomes false. We don't re-fetch the
+      // whole list — the in-place patch is enough for the UI and
+      // avoids a flash of the loading state.
+      setState((prev) => {
+        if (prev.mode !== "ready" && prev.mode !== "creating") return prev;
+        return {
+          ...prev,
+          lists: prev.lists.map((l) =>
+            l.id === listId ? { ...l, contains_business: false } : l
+          ),
+        };
+      });
+    } catch (err: any) {
+      setState({ mode: "error", message: err?.message || "Error" });
+    } finally {
+      setRemovingListId(null);
+    }
+  };
+
   const createListOnly = async () => {
     if (state.mode !== "creating") return;
     const name = state.draft.trim();
@@ -268,11 +305,44 @@ export default function AddToListButton({
                     </span>
                     {alreadyIn ? (
                       <span
-                        className="text-amber-300 text-xs font-medium shrink-0 inline-flex items-center gap-1"
+                        className="shrink-0 inline-flex items-center gap-1.5"
                         title="Este negocio ya está en esta lista"
                       >
-                        <span aria-hidden="true">✓</span>
-                        <span>Ya está</span>
+                        <span className="text-amber-300 text-xs font-medium inline-flex items-center gap-1">
+                          <span aria-hidden="true">✓</span>
+                          <span>Ya está</span>
+                        </span>
+                        {/* Inline ✕ button — removes the business from
+                            this list directly. Stops propagation so the
+                            row's onClick (which adds) doesn't fire.
+                            Shows on hover so the row stays calm at rest. */}
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Quitar ${businessName ?? "este negocio"} de la lista ${l.name}`}
+                          title={`Quitar de "${l.name}"`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeFromList(l.id);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              removeFromList(l.id);
+                            }
+                          }}
+                          className="opacity-0 group-hover:opacity-100 focus:opacity-100 inline-flex items-center justify-center w-5 h-5 rounded text-slate-500 dark:text-slate-500 hover:text-red-300 dark:hover:text-red-300 hover:bg-red-500/15 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-wait"
+                        >
+                          {removingListId === l.id ? (
+                            <span
+                              className="inline-block w-3 h-3 border-2 border-red-300 border-t-transparent rounded-full animate-spin"
+                              aria-hidden="true"
+                            />
+                          ) : (
+                            <span aria-hidden="true" className="text-[14px] leading-none">✕</span>
+                          )}
+                        </span>
                       </span>
                     ) : (
                       <span className="text-sky-400 opacity-0 group-hover:opacity-100 text-xs shrink-0">
