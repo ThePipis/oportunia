@@ -98,7 +98,10 @@ export function getKanbanData(): Record<PipelineStage, Array<{
   const db = getDb();
   const STAGES: PipelineStage[] = ["lead", "contacted", "meeting", "proposal", "closed_won", "closed_lost"];
 
-  // For each business, get the latest activity's pipeline_stage
+  // For each business, get the latest activity's pipeline_stage.
+  // We include businesses WITHOUT a score too — the user just added
+  // them via the radar and the score gets calculated in the background.
+  // The card UI shows "—" for missing score/tier.
   const rows = db.prepare(
     `SELECT b.id as business_id, b.name as business_name, b.city,
             s.total_score, s.tier,
@@ -112,8 +115,11 @@ export function getKanbanData(): Record<PipelineStage, Array<{
        FROM activities
        WHERE pipeline_stage IS NOT NULL
      ) a ON a.business_id = b.id AND a.rn = 1
-     WHERE s.total_score IS NOT NULL
-     ORDER BY s.total_score DESC`
+     WHERE a.business_id IS NOT NULL
+     ORDER BY
+       CASE WHEN s.total_score IS NULL THEN 1 ELSE 0 END,
+       s.total_score DESC NULLS LAST,
+       a.created_at DESC`
   ).all() as any[];
 
   const kanban: Record<PipelineStage, any[]> = {

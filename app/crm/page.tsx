@@ -87,9 +87,29 @@ export default function CRMPage() {
       });
       if (!res.ok) {
         await load(); // restore from server on failure
+      } else {
+        // The server may have queued a background rescore for this
+        // business. Give it a moment, then refresh so the card shows
+        // the new score instead of "—".
+        setTimeout(() => load(), 600);
       }
     } catch {
       await load();
+    }
+  };
+
+  // Inline rescore for cards that don't have a score yet. Used by the
+  // "Calcular" button in the card.
+  const [rescoringId, setRescoringId] = React.useState<string | null>(null);
+  const rescore = async (businessId: string) => {
+    setRescoringId(businessId);
+    try {
+      await fetch(`/api/businesses/${businessId}/rescore`, { method: "POST" });
+      await load();
+    } catch (e) {
+      console.error("rescore failed", e);
+    } finally {
+      setRescoringId(null);
     }
   };
 
@@ -221,7 +241,7 @@ export default function CRMPage() {
                                   <p className="text-[10px] text-slate-500">📍 {card.city}</p>
                                 )}
                               </a>
-                              {card.total_score !== null && (
+                              {card.total_score !== null ? (
                                 <div className="flex items-center gap-2">
                                   <span className="text-base font-bold text-sky-300">
                                     {card.total_score}
@@ -232,6 +252,32 @@ export default function CRMPage() {
                                     </span>
                                   )}
                                 </div>
+                              ) : (
+                                /* No score yet — show a "Calcular" button so
+                                   the user can trigger the deterministic
+                                   score inline. The API may also queue
+                                   a background rescore on /api/crm/move. */
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    rescore(card.business_id);
+                                  }}
+                                  disabled={rescoringId === card.business_id}
+                                  className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 hover:bg-amber-500/25 disabled:opacity-50"
+                                  title="Calcular score con los datos de Google Places"
+                                >
+                                  {rescoringId === card.business_id ? (
+                                    <>
+                                      <span
+                                        className="inline-block w-2.5 h-2.5 border-2 border-amber-300 border-t-transparent rounded-full animate-spin"
+                                        aria-hidden="true"
+                                      />
+                                      Calculando...
+                                    </>
+                                  ) : (
+                                    <>— Calcular</>
+                                  )}
+                                </button>
                               )}
                               {card.last_activity && (
                                 <p className="text-[10px] text-slate-500 italic line-clamp-1">
