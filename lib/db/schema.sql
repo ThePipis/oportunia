@@ -230,10 +230,12 @@ CREATE TABLE IF NOT EXISTS list_items (
 );
 
 -- Actividades del CRM (pipeline por negocio)
+-- type: kind of activity. Includes 'pipeline_removed' as a soft-delete marker
+--   that hides a business from the kanban while keeping the audit trail.
 CREATE TABLE IF NOT EXISTS activities (
   id TEXT PRIMARY KEY,
   business_id TEXT NOT NULL,
-  type TEXT NOT NULL CHECK (type IN ('call', 'email', 'meeting', 'note', 'proposal_sent', 'status_change', 'task')),
+  type TEXT NOT NULL CHECK (type IN ('call', 'email', 'meeting', 'note', 'proposal_sent', 'status_change', 'task', 'pipeline_removed')),
   status TEXT CHECK (status IN ('pending', 'completed', 'cancelled') OR status IS NULL),
   pipeline_stage TEXT CHECK (pipeline_stage IN ('lead', 'contacted', 'meeting', 'proposal', 'closed_won', 'closed_lost') OR pipeline_stage IS NULL),
   title TEXT NOT NULL,

@@ -5,7 +5,7 @@
 import { getDb } from "../client";
 import { randomUUID } from "node:crypto";
 
-export type ActivityType = "call" | "email" | "meeting" | "note" | "proposal_sent" | "status_change" | "task";
+export type ActivityType = "call" | "email" | "meeting" | "note" | "proposal_sent" | "status_change" | "task" | "pipeline_removed";
 export type PipelineStage = "lead" | "contacted" | "meeting" | "proposal" | "closed_won" | "closed_lost";
 
 export interface Activity {
@@ -102,20 +102,26 @@ export function getKanbanData(): Record<PipelineStage, Array<{
   // We include businesses WITHOUT a score too — the user just added
   // them via the radar and the score gets calculated in the background.
   // The card UI shows "—" for missing score/tier.
+  //
+  // The inner query also considers "pipeline_removed" activities so we
+  // can tell when a business was just removed (its latest activity is
+  // a removal marker). The outer WHERE then filters those out.
   const rows = db.prepare(
     `SELECT b.id as business_id, b.name as business_name, b.city,
             s.total_score, s.tier,
             a.pipeline_stage as stage,
+            a.type as last_type,
             a.title as last_activity, a.created_at as last_activity_at
      FROM businesses b
      LEFT JOIN business_scores s ON s.business_id = b.id
      LEFT JOIN (
-       SELECT business_id, pipeline_stage, title, created_at,
+       SELECT business_id, pipeline_stage, type, title, created_at,
          ROW_NUMBER() OVER (PARTITION BY business_id ORDER BY created_at DESC) as rn
        FROM activities
-       WHERE pipeline_stage IS NOT NULL
+       WHERE pipeline_stage IS NOT NULL OR type = 'pipeline_removed'
      ) a ON a.business_id = b.id AND a.rn = 1
      WHERE a.business_id IS NOT NULL
+       AND a.type != 'pipeline_removed'
      ORDER BY
        CASE WHEN s.total_score IS NULL THEN 1 ELSE 0 END,
        s.total_score DESC NULLS LAST,

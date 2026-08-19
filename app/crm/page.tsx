@@ -113,6 +113,40 @@ export default function CRMPage() {
     }
   };
 
+  // Remove from pipeline (only allowed in the LEAD stage). Creates a
+  // "pipeline_removed" activity; the kanban query hides the business
+  // once that becomes its latest activity.
+  const [removingId, setRemovingId] = React.useState<string | null>(null);
+  const removeFromPipeline = async (
+    businessId: string,
+    businessName: string
+  ) => {
+    if (
+      !confirm(
+        `¿Eliminar "${businessName}" del pipeline?\n\n` +
+          `El negocio va a desaparecer del kanban. Lo podés volver a agregar desde el radar con el botón +Pipeline.`
+      )
+    )
+      return;
+    setRemovingId(businessId);
+    try {
+      const res = await fetch("/api/crm/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ business_id: businessId }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Error ${res.status}`);
+      }
+      await load();
+    } catch (e: any) {
+      alert(`Error al eliminar: ${e?.message}`);
+    } finally {
+      setRemovingId(null);
+    }
+  };
+
   // Drag-and-drop handlers — HTML5 native, no extra deps
   const onDragStart = (e: React.DragEvent, businessId: string) => {
     e.dataTransfer.setData(DRAG_MIME, businessId);
@@ -280,7 +314,7 @@ export default function CRMPage() {
                                 </button>
                               )}
                               {card.last_activity && (
-                                <p className="text-[10px] text-slate-500 italic line-clamp-1">
+                                <p className="text-[10px] text-slate-500 dark:text-slate-500 italic line-clamp-1">
                                   {card.last_activity}
                                 </p>
                               )}
@@ -288,7 +322,7 @@ export default function CRMPage() {
                                 {prevStage && (
                                   <button
                                     onClick={() => moveToStage(card.business_id, prevStage.key)}
-                                    className="text-[10px] text-slate-500 hover:text-slate-300 px-1"
+                                    className="text-[10px] text-slate-500 dark:text-slate-500 hover:text-slate-300 dark:hover:text-slate-200 px-1"
                                     title={`Mover a ${prevStage.label}`}
                                   >
                                     ←
@@ -297,13 +331,46 @@ export default function CRMPage() {
                                 {nextStage && (
                                   <button
                                     onClick={() => moveToStage(card.business_id, nextStage.key)}
-                                    className="text-[10px] text-sky-400 hover:text-sky-300 px-1 ml-auto"
+                                    className="text-[10px] text-sky-400 dark:text-sky-500 hover:text-sky-300 dark:hover:text-sky-600 px-1 ml-auto"
                                     title={`Mover a ${nextStage.label}`}
                                   >
                                     {nextStage.label} →
                                   </button>
                                 )}
                               </div>
+                              {/* "Eliminar del pipeline" — only visible in the LEAD
+                                  stage. Once the business has progressed to
+                                  Contactado/Reunión/Propuesta the user should mark
+                                  it as closed_lost instead, not delete. The button
+                                  reappears if the card is moved back to LEAD.
+                                  Destructive action — visually separated from the
+                                  forward-arrows and clearly marked in red. */}
+                              {stage.key === "lead" && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    removeFromPipeline(card.business_id, card.business_name);
+                                  }}
+                                  disabled={removingId === card.business_id}
+                                  className="w-full text-[11px] font-medium text-red-600 dark:text-red-300 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 border border-red-200 dark:border-red-500/30 hover:border-red-400 dark:hover:border-red-500/60 disabled:opacity-50 disabled:cursor-wait mt-1 py-1 rounded transition-colors flex items-center justify-center gap-1.5"
+                                  title="Quitar este negocio del pipeline (solo disponible en LEAD)"
+                                >
+                                  {removingId === card.business_id ? (
+                                    <>
+                                      <span
+                                        className="inline-block w-3 h-3 border-2 border-red-300 border-t-transparent rounded-full animate-spin"
+                                        aria-hidden="true"
+                                      />
+                                      Eliminando...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span aria-hidden="true">🗑️</span>
+                                      <span>Eliminar del pipeline</span>
+                                    </>
+                                  )}
+                                </button>
+                              )}
                             </CardContent>
                           </Card>
                         );
