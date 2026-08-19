@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import BusinessSidePanel from "@/components/map/business-side-panel";
 import LocationSearch from "@/components/map/location-search";
 import CategoryMultiSelect from "@/components/map/category-multi-select";
 import type { BusinessMarker } from "@/lib/map/types";
@@ -36,6 +35,15 @@ interface SearchResponse {
   error?: string;
 }
 
+/**
+ * Strip the protocol prefix from a URL so it fits in a tight column.
+ * e.g. "https://www.example.com/path" -> "www.example.com/path"
+ */
+function shortUrl(url: string | null | undefined): string {
+  if (!url) return "";
+  return url.replace(/^https?:\/\//, "").replace(/^www\./, "");
+}
+
 export default function RadarPage() {
   const { t } = useT();
   const { state, update, clear, hydrated } = useRadarSearchState();
@@ -58,9 +66,14 @@ export default function RadarPage() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  // The active search query: prefer the multi-select categories; if none
-  // selected, fall back to free-text `query`. The actual category queries
-  // are resolved by the API by looking up the selected ids in the DB.
+  // Hover highlight — purely visual, does NOT persist. Allows the user to
+  // sweep the mouse down the list and see the corresponding pin glow on
+  // the map without committing to a selection.
+  const [hoveredBusinessId, setHoveredBusinessId] = React.useState<
+    string | null
+  >(null);
+  const effectiveSelectedId = hoveredBusinessId ?? selectedBusinessId;
+
   const canSearch = selectedCategoryIds.length > 0 || query.trim().length > 0;
 
   const handleSearch = async (e?: React.FormEvent) => {
@@ -122,23 +135,9 @@ export default function RadarPage() {
       }));
   }, [results]);
 
-  const selectedBusiness = mapMarkers.find((b) => b.id === selectedBusinessId) ?? null;
-
-  // Track which business is "highlighted" because the user just clicked it
-  // in the list. The highlight survives navigation back to the radar even
-  // though the list item itself is now a Link to the full profile.
-  const [hoveredBusinessId, setHoveredBusinessId] = React.useState<
-    string | null
-  >(null);
-
-  // After hydration, if there was a selected business from the persisted
-  // state, keep it visible (e.g. so the map marker stays highlighted after
-  // the user returns from a profile page).
-  const effectiveSelectedId = hoveredBusinessId ?? selectedBusinessId;
-
   return (
     <main className="min-h-screen bg-gradient-radial">
-      <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-4">
+      <div className="max-w-[1600px] mx-auto p-4 md:p-6 space-y-4">
         {/* Header */}
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
@@ -156,9 +155,7 @@ export default function RadarPage() {
           </div>
         </div>
 
-        {/* Restored-search banner — only visible right after hydration
-            if there's a previously-saved search to show. Tells the user
-            "we remembered your last search" so they aren't confused. */}
+        {/* Restored-search banner */}
         {hydrated && searched && results.length > 0 && (
           <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-sky-500/10 border border-sky-500/30 text-xs text-sky-300">
             <span>
@@ -196,10 +193,10 @@ export default function RadarPage() {
           </Card>
         )}
 
-        {/* Main 2-column layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-4">
-          {/* Map (left, larger) */}
-          <div className="relative h-[500px] lg:h-[700px] rounded-lg overflow-hidden border border-white/10">
+        {/* ───────── Top section: Map + Form (2-column on tablet+) ───────── */}
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_380px] gap-4">
+          {/* Map (left, larger) — fixed height so the form aligns with it */}
+          <div className="relative h-[500px] lg:h-[620px] rounded-lg overflow-hidden border border-white/10 bg-slate-900/40">
             <RadarMap
               center={origin}
               radiusMeters={milesToMeters(radiusMiles)}
@@ -209,211 +206,327 @@ export default function RadarPage() {
               businesses={mapMarkers}
               selectedId={effectiveSelectedId}
               onCenterChange={(lat, lng) => update({ origin: { lat, lng } })}
-              onSelectBusiness={(id) => {
-                setHoveredBusinessId(id);
-                update({ selectedBusinessId: id });
-              }}
-            />
-            <BusinessSidePanel
-              business={selectedBusiness}
-              origin={origin}
-              onClose={() => {
-                setHoveredBusinessId(null);
-                update({ selectedBusinessId: null });
-              }}
+              onSelectBusiness={(id) =>
+                update({ selectedBusinessId: id })
+              }
             />
           </div>
 
-          {/* Sidebar (right, narrower) */}
-          <div className="space-y-4">
-            {/* Search controls */}
-            <Card>
-              <CardContent className="pt-6 space-y-4">
-                <form onSubmit={handleSearch} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="city">Ubicación</Label>
-                    <LocationSearch
-                      value={hydrated ? city : ""}
-                      onChange={(v) => update({ city: v })}
-                      onLocationSelect={(lat, lng) =>
-                        update({ origin: { lat, lng } })
-                      }
-                      placeholder="Ciudad, dirección, avenida o lugar..."
-                    />
-                    <p className="text-[11px] text-slate-500">
-                      Escribí cualquier ciudad, calle o lugar del mundo. El pin del mapa se mueve al seleccionar.
-                    </p>
-                  </div>
+          {/* Form (right, compact) */}
+          <Card>
+            <CardContent className="pt-5 space-y-3">
+              <form onSubmit={handleSearch} className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="city" className="text-xs">Ubicación</Label>
+                  <LocationSearch
+                    value={hydrated ? city : ""}
+                    onChange={(v) => update({ city: v })}
+                    onLocationSelect={(lat, lng) =>
+                      update({ origin: { lat, lng } })
+                    }
+                    placeholder="Ciudad, dirección o lugar..."
+                  />
+                </div>
 
-                  <div className="space-y-2">
-                    <Label>Categoría</Label>
-                    <CategoryMultiSelect
-                      value={selectedCategoryIds}
-                      onChange={(v) => update({ selectedCategoryIds: v })}
-                    />
-                  </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Categoría</Label>
+                  <CategoryMultiSelect
+                    value={selectedCategoryIds}
+                    onChange={(v) => update({ selectedCategoryIds: v })}
+                  />
+                </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="query">Búsqueda personalizada (opcional)</Label>
-                    <Input
-                      id="query"
-                      placeholder="ej. 'abierto 24/7' o 'acepta efectivo'"
-                      value={query}
-                      onChange={(e) => update({ query: e.target.value })}
-                    />
-                    <p className="text-[11px] text-slate-500">
-                      Se agrega a cada categoría seleccionada. Ej: HVAC + "abierto 24/7".
-                    </p>
-                  </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="query" className="text-xs">
+                    Búsqueda personalizada
+                    <span className="ml-1 text-slate-500 font-normal">(opcional)</span>
+                  </Label>
+                  <Input
+                    id="query"
+                    placeholder="ej. 'abierto 24/7'"
+                    value={query}
+                    onChange={(e) => update({ query: e.target.value })}
+                    className="h-9"
+                  />
+                </div>
 
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <Label htmlFor="maxResults" className="text-slate-400">Máx resultados</Label>
-                      <span className="font-mono text-slate-300">{maxResults}</span>
-                    </div>
-                    <input
-                      id="maxResults"
-                      type="range"
-                      min="5"
-                      max="40"
-                      value={maxResults}
-                      onChange={(e) =>
-                        update({ maxResults: parseInt(e.target.value) })
-                      }
-                      className="w-full h-1.5 bg-slate-800 rounded-full appearance-none cursor-pointer accent-sky-500"
-                    />
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <Label htmlFor="maxResults" className="text-slate-400 text-[11px]">
+                      Máx resultados
+                    </Label>
+                    <span className="font-mono text-slate-300 text-[11px]">{maxResults}</span>
                   </div>
+                  <input
+                    id="maxResults"
+                    type="range"
+                    min="5"
+                    max="40"
+                    value={maxResults}
+                    onChange={(e) =>
+                      update({ maxResults: parseInt(e.target.value) })
+                    }
+                    className="w-full h-1 bg-slate-800 rounded-full appearance-none cursor-pointer accent-sky-500"
+                  />
+                </div>
 
-                  <div className="flex gap-2">
-                    <Button
-                      type="submit"
-                      disabled={loading}
-                      size="lg"
-                      className="flex-1"
-                    >
-                      {loading ? (
-                        <>
-                          <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          Buscando...
-                        </>
-                      ) : (
-                        <>🔍 Buscar en el mapa</>
-                      )}
-                    </Button>
-                    {(searched || query || selectedCategoryIds.length > 0) && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="lg"
-                        onClick={clear}
-                        aria-label="Limpiar búsqueda"
-                        title="Limpiar búsqueda"
-                        className="shrink-0"
-                      >
-                        ✕
-                      </Button>
+                <div className="flex gap-2 pt-1">
+                  <Button
+                    type="submit"
+                    disabled={loading}
+                    size="default"
+                    className="flex-1"
+                  >
+                    {loading ? (
+                      <>
+                        <span className="inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Buscando...
+                      </>
+                    ) : (
+                      <>🔍 Buscar en el mapa</>
                     )}
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-
-            {/* Results list */}
-            {loading && (
-              <Card>
-                <CardContent className="py-8 text-center">
-                  <div className="inline-block w-6 h-6 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />
-                  <p className="mt-2 text-sm text-slate-400">
-                    Buscando en Google Places...
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-
-            {!loading && searched && results.length === 0 && !error && (
-              <Card>
-                <CardContent className="py-8 text-center">
-                  <div className="text-3xl mb-2">🤷</div>
-                  <p className="text-sm text-slate-400">Sin resultados</p>
-                </CardContent>
-              </Card>
-            )}
-
-            {!loading && results.length > 0 && (
-              <Card>
-                <CardContent className="pt-4 pb-2">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm">
-                      <span className="font-bold text-sky-400">{results.length}</span>{" "}
-                      <span className="text-slate-400">de </span>
-                      <span className="font-mono text-xs text-slate-500">{totalFound}</span>{" "}
-                      <span className="text-slate-400">encontrados</span>
-                    </p>
-                    <button
+                  </Button>
+                  {(searched || query || selectedCategoryIds.length > 0) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="default"
                       onClick={clear}
-                      className="text-[11px] text-slate-400 hover:text-slate-100 underline underline-offset-2"
+                      aria-label="Limpiar búsqueda"
+                      title="Limpiar búsqueda"
+                      className="shrink-0 px-3"
                     >
-                      Nueva búsqueda
-                    </button>
-                  </div>
-                  <div className="space-y-1.5 max-h-[400px] overflow-y-auto pr-1">
+                      ✕
+                    </Button>
+                  )}
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* ───────── Bottom section: Results table (full width) ───────── */}
+        {loading && (
+          <Card>
+            <CardContent className="py-10 text-center">
+              <div className="inline-block w-6 h-6 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />
+              <p className="mt-2 text-sm text-slate-400">
+                Buscando en Google Places...
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {!loading && searched && results.length === 0 && !error && (
+          <Card>
+            <CardContent className="py-10 text-center">
+              <div className="text-3xl mb-2">🤷</div>
+              <p className="text-sm text-slate-400">Sin resultados</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {!loading && results.length > 0 && (
+          <Card>
+            <CardContent className="pt-5 pb-3">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <p className="text-sm">
+                  <span className="font-bold text-sky-400 text-lg">{results.length}</span>
+                  <span className="text-slate-400"> de </span>
+                  <span className="font-mono text-slate-500">{totalFound}</span>
+                  <span className="text-slate-400"> encontrados</span>
+                </p>
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="text-slate-500 hidden sm:inline">
+                    Pasá el mouse por una fila para resaltar el pin en el mapa
+                  </span>
+                  <button
+                    onClick={clear}
+                    className="text-sky-300 hover:text-sky-100 underline underline-offset-2"
+                  >
+                    Nueva búsqueda
+                  </button>
+                </div>
+              </div>
+
+              {/* Wide results table */}
+              <div className="overflow-x-auto rounded-md border border-white/5">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-900/60 text-[11px] uppercase tracking-wide text-slate-400 border-b border-white/5">
+                      <th className="text-left font-semibold py-2.5 pl-3 pr-2 w-[28%]">
+                        Negocio
+                      </th>
+                      <th className="text-left font-semibold py-2.5 px-2 w-[20%]">
+                        Dirección
+                      </th>
+                      <th className="text-left font-semibold py-2.5 px-2 w-[14%]">
+                        Teléfono
+                      </th>
+                      <th className="text-left font-semibold py-2.5 px-2 w-[16%]">
+                        Web
+                      </th>
+                      <th className="text-center font-semibold py-2.5 px-2 w-[8%]">
+                        ⭐ Rating
+                      </th>
+                      <th className="text-right font-semibold py-2.5 px-2 w-[7%]">
+                        Distancia
+                      </th>
+                      <th className="text-right font-semibold py-2.5 pl-2 pr-3 w-[7%]">
+                        Acciones
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
                     {results.map((r) => {
                       const isSelected = r.id === effectiveSelectedId;
+                      const webShort = shortUrl(r.website);
+                      const mapsHref = r.lat != null && r.lng != null
+                        ? `https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lng}`
+                        : null;
                       return (
-                        <Link
+                        <tr
                           key={r.id}
-                          href={`/radar/${r.id}`}
                           onMouseEnter={() => setHoveredBusinessId(r.id)}
                           onMouseLeave={() => setHoveredBusinessId(null)}
                           onClick={() => update({ selectedBusinessId: r.id })}
-                          className={`block w-full text-left p-2 rounded-md border transition-colors ${
+                          className={`border-b border-white/5 transition-colors cursor-pointer ${
                             isSelected
-                              ? "bg-orange-500/15 border-orange-500/40"
-                              : "bg-slate-900/40 border-white/5 hover:bg-slate-800/50"
+                              ? "bg-orange-500/10"
+                              : "hover:bg-slate-800/40"
                           }`}
                         >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-sm text-slate-100 truncate">
-                                {r.name}
+                          {/* Name + category */}
+                          <td className="py-2.5 pl-3 pr-2 align-top">
+                            <div className="font-medium text-slate-100 truncate">
+                              {r.name}
+                            </div>
+                            {r.primary_type && (
+                              <div className="text-[11px] text-slate-500 truncate mt-0.5">
+                                {r.primary_type.replace(/_/g, " ")}
                               </div>
-                              {r.address && (
-                                <div className="text-[11px] text-slate-500 truncate">
-                                  {r.address}
-                                </div>
+                            )}
+                          </td>
+
+                          {/* Address */}
+                          <td className="py-2.5 px-2 align-top text-slate-300 text-[12px]">
+                            {r.address ? (
+                              <span className="line-clamp-2">{r.address}</span>
+                            ) : (
+                              <span className="text-slate-600">—</span>
+                            )}
+                          </td>
+
+                          {/* Phone (click-to-call, stops row click) */}
+                          <td className="py-2.5 px-2 align-top text-[12px]">
+                            {r.phone ? (
+                              <a
+                                href={`tel:${r.phone}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-sky-400 hover:text-sky-300 hover:underline tabular-nums"
+                              >
+                                {r.phone}
+                              </a>
+                            ) : (
+                              <span className="text-slate-600">—</span>
+                            )}
+                          </td>
+
+                          {/* Web (click-to-open, stops row click) */}
+                          <td className="py-2.5 px-2 align-top text-[12px]">
+                            {webShort ? (
+                              <a
+                                href={r.website!}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-sky-400 hover:text-sky-300 hover:underline truncate inline-block max-w-full align-middle"
+                                title={r.website ?? undefined}
+                              >
+                                {webShort}
+                              </a>
+                            ) : (
+                              <span className="text-slate-600">—</span>
+                            )}
+                          </td>
+
+                          {/* Rating */}
+                          <td className="py-2.5 px-2 align-top text-center">
+                            {r.rating != null ? (
+                              <div className="inline-flex items-baseline gap-1">
+                                <span className="text-amber-400 font-bold text-[13px]">
+                                  {r.rating.toFixed(1)}
+                                </span>
+                                {r.review_count != null && (
+                                  <span className="text-[10px] text-slate-500 tabular-nums">
+                                    ({r.review_count})
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-slate-600">—</span>
+                            )}
+                          </td>
+
+                          {/* Distance */}
+                          <td className="py-2.5 px-2 align-top text-right">
+                            {r.distance_miles != null ? (
+                              <span className="font-mono text-[12px] text-sky-300 tabular-nums">
+                                {r.distance_miles.toFixed(1)} mi
+                              </span>
+                            ) : (
+                              <span className="text-slate-600">—</span>
+                            )}
+                          </td>
+
+                          {/* Actions */}
+                          <td className="py-2.5 pl-2 pr-3 align-top text-right">
+                            <div
+                              className="inline-flex items-center gap-1.5"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {mapsHref && (
+                                <a
+                                  href={mapsHref}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="Abrir en Google Maps"
+                                  className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-slate-800/60 hover:bg-slate-700/80 text-slate-300 hover:text-white text-[14px] border border-white/5"
+                                >
+                                  🗺️
+                                </a>
                               )}
+                              <Link
+                                href={`/radar/${r.id}`}
+                                title="Ver perfil completo + talking points"
+                                className="inline-flex items-center gap-1 px-2.5 h-7 rounded-md bg-orange-500/90 hover:bg-orange-500 text-white text-[11px] font-semibold border border-orange-400/50"
+                              >
+                                Perfil
+                                <span aria-hidden="true">→</span>
+                              </Link>
                             </div>
-                            <div className="text-right shrink-0 text-[10px]">
-                              {r.rating != null && (
-                                <div className="text-amber-400">⭐ {r.rating.toFixed(1)}</div>
-                              )}
-                              {r.distance_miles != null && (
-                                <div className="text-sky-300 font-mono">
-                                  {r.distance_miles.toFixed(1)}mi
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </Link>
+                          </td>
+                        </tr>
                       );
                     })}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-            {!searched && !loading && hydrated && (
-              <Card>
-                <CardContent className="py-6 text-center">
-                  <div className="text-2xl mb-2">◎</div>
-                  <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                    Configurá la búsqueda y vas a ver los resultados en el mapa.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </div>
+        {!searched && !loading && hydrated && (
+          <Card>
+            <CardContent className="py-8 text-center">
+              <div className="text-3xl mb-2">◎</div>
+              <p className="text-sm text-slate-500 max-w-md mx-auto">
+                Configurá la búsqueda arriba y vas a ver los resultados en el mapa y en la tabla.
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </main>
   );
