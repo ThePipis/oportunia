@@ -37,10 +37,10 @@ type PopoverState =
   | { mode: "loading" }
   | { mode: "ready"; lists: List[] }
   | { mode: "creating"; lists: List[]; draft: string }
-  | { mode: "saving" }
-  | { mode: "saved"; message: string }
-  | { mode: "duplicate"; message: string }
-  | { mode: "error"; message: string };
+  | { mode: "saving"; lists: List[] }
+  | { mode: "saved"; message: string; lists: List[] }
+  | { mode: "duplicate"; message: string; lists: List[] }
+  | { mode: "error"; message: string; lists: List[] };
 
 export default function AddToListButton({
   businessId,
@@ -74,7 +74,7 @@ export default function AddToListButton({
       })
       .catch((e) => {
         if (cancelled) return;
-        setState({ mode: "error", message: e?.message || "Error al cargar" });
+        setState({ mode: "error", message: e?.message || "Error al cargar", lists: [] });
       });
     return () => {
       cancelled = true;
@@ -104,15 +104,18 @@ export default function AddToListButton({
     }
   }, [state.mode]);
 
-  // Auto-dismiss terminal states after 1.5s
-  React.useEffect(() => {
-    if (state.mode !== "saved" && state.mode !== "duplicate") return;
-    const t = setTimeout(() => setOpen(false), 1500);
-    return () => clearTimeout(t);
-  }, [state]);
+  // Note: there is intentionally NO auto-dismiss. The popover stays
+  // open after a "saved" / "duplicate" / "error" tick so the user
+  // can add the business to several lists in a row without having
+  // to re-open the popover each time. They close the popover by
+  // clicking outside (the existing useEffect with onDocClick above)
+  // or by pressing Esc.
 
   const addToExistingList = async (listId: string) => {
-    setState({ mode: "saving" });
+    setState((prev) => {
+      const lists = "lists" in prev ? prev.lists : [];
+      return { mode: "saving" as const, lists };
+    });
     try {
       const res = await fetch(`/api/lists/${listId}/items/${businessId}`, {
         method: "POST",
@@ -128,15 +131,30 @@ export default function AddToListButton({
       // exists. Both are normal outcomes — surface a different
       // message so the user can see what happened.
       if (data.added === false) {
-        setState({
-          mode: "duplicate",
-          message: "Ya está en esta lista",
+        setState((prev) => {
+          // Keep the lists in state so the popover body can keep
+          // rendering them after a duplicate/saved click — the
+          // popover must NOT close, see the no-auto-dismiss note
+          // near the top of the file. "saving" is included because
+          // we always transition from saving → saved/duplicate here.
+          const lists = "lists" in prev ? prev.lists : [];
+          return { mode: "duplicate", message: "Ya está en esta lista", lists };
         });
       } else {
-        setState({ mode: "saved", message: "✓ Agregado" });
+        setState((prev) => {
+          const lists = "lists" in prev
+            ? prev.lists.map((l) =>
+                l.id === listId ? { ...l, contains_business: true } : l
+              )
+            : [];
+          return { mode: "saved", message: "✓ Agregado", lists };
+        });
       }
     } catch (e: any) {
-      setState({ mode: "error", message: e?.message || "Error" });
+      setState((prev) => {
+        const lists = "lists" in prev ? prev.lists : [];
+        return { mode: "error", message: e?.message || "Error", lists };
+      });
     }
   };
 
@@ -171,7 +189,10 @@ export default function AddToListButton({
         };
       });
     } catch (err: any) {
-      setState({ mode: "error", message: err?.message || "Error" });
+      setState((prev) => {
+        const lists = "lists" in prev ? prev.lists : [];
+        return { mode: "error", message: err?.message || "Error", lists };
+      });
     } finally {
       setRemovingListId(null);
     }
@@ -181,7 +202,15 @@ export default function AddToListButton({
     if (state.mode !== "creating") return;
     const name = state.draft.trim();
     if (!name) return;
-    setState({ mode: "saving" });
+    // Use a functional updater so we preserve the current lists while
+    // the POST /api/lists is in flight. The popover must NOT close
+    // during this transition; the body should keep showing the list
+    // (in the muted "saving" spinner state) so the user sees their
+    // list collection didn't disappear.
+    setState((prev) => {
+      const lists = "lists" in prev ? prev.lists : [];
+      return { mode: "saving" as const, lists };
+    });
     try {
       // Create the list. We intentionally do NOT add the current
       // business to the new list — the user might want an empty
@@ -203,12 +232,18 @@ export default function AddToListButton({
       // appears at the top (matches /api/lists ORDER BY created_at
       // DESC). Mark contains_business: false so the row renders the
       // normal "+ Agregar" hover hint, not the "Ya está" amber badge.
-      setState({
-        mode: "ready",
-        lists: [{ ...list, contains_business: false }, ...state.lists],
+      setState((prev) => {
+        const lists = "lists" in prev ? prev.lists : [];
+        return {
+          mode: "ready",
+          lists: [{ ...list, contains_business: false }, ...lists],
+        };
       });
     } catch (e: any) {
-      setState({ mode: "error", message: e?.message || "Error" });
+      setState((prev) => {
+        const lists = "lists" in prev ? prev.lists : [];
+        return { mode: "error", message: e?.message || "Error", lists };
+      });
     }
   };
 
@@ -268,42 +303,88 @@ export default function AddToListButton({
               </div>
             )}
 
-            {state.mode === "ready" && state.lists.length === 0 && (
-              <div className="px-3 py-4 text-center text-xs text-slate-500">
-                No tenés listas todavía. Creá la primera abajo.
+            {/* Transient feedback message that lives at the top of the
+                body. We intentionally do NOT hide the list when this is
+                shown — the user is in the middle of adding the
+                business to several lists and needs to see them all. */}
+            {state.mode === "saved" && (
+              <div className="px-3 py-1.5 text-center text-[11px] text-emerald-300 bg-emerald-500/10 border-b border-emerald-500/20 font-medium">
+                <span aria-hidden="true">✓</span> {state.message}
+              </div>
+            )}
+            {state.mode === "duplicate" && (
+              <div className="px-3 py-1.5 text-center text-[11px] text-amber-300 bg-amber-500/10 border-b border-amber-500/20 font-medium">
+                <span aria-hidden="true">ℹ️</span> {state.message}
+              </div>
+            )}
+            {state.mode === "error" && (
+              <div className="px-3 py-1.5 text-center text-[11px] text-red-300 bg-red-500/10 border-b border-red-500/20">
+                <span aria-hidden="true">⚠</span> {state.message}
               </div>
             )}
 
-            {(state.mode === "ready" || state.mode === "creating") &&
-              state.lists.map((l) => {
-                const alreadyIn = !!l.contains_business;
-                return (
-                  <button
-                    key={l.id}
-                    type="button"
-                    onClick={() => addToExistingList(l.id)}
-                    className={`w-full text-left px-3 py-2 border-b border-white/5 last:border-b-0 flex items-center gap-2 group ${
-                      alreadyIn
-                        ? "bg-amber-500/5 hover:bg-amber-500/10"
-                        : "hover:bg-slate-800/70"
-                    }`}
-                  >
-                    <span
-                      className="w-2 h-2 rounded-full shrink-0"
-                      style={{ backgroundColor: l.color === "sky" ? "#0ea5e9" : l.color === "emerald" ? "#10b981" : l.color === "amber" ? "#f59e0b" : l.color === "violet" ? "#8b5cf6" : l.color === "rose" ? "#f43f5e" : "#0ea5e9" }}
-                      aria-hidden="true"
-                    />
-                    <span className="flex-1 min-w-0">
-                      <span className="block text-sm text-slate-100 truncate">
-                        {l.name}
-                      </span>
-                      {l.description && (
-                        <span className="block text-[10px] text-slate-500 truncate">
-                          {l.description}
+            {/* Saving indicator — shown above the list (which stays
+                visible below). The list itself never disappears during
+                a save, so the popover never looks like it's closing
+                when the user adds a business to a list. The list rows
+                get a slightly faded look + a `busy` cursor to signal
+                that another request is in flight and the buttons
+                ignore extra clicks. */}
+            {state.mode === "saving" && (
+              <div className="px-3 py-1.5 text-center text-[11px] text-sky-300 bg-sky-500/10 border-b border-sky-500/20 font-medium">
+                <span
+                  className="inline-block w-3 h-3 border-2 border-sky-400 border-t-transparent rounded-full animate-spin mr-1.5 align-middle"
+                  aria-hidden="true"
+                />
+                Guardando...
+              </div>
+            )}
+
+            {/* The list is shown in every state that has lists
+                available — ready, creating, saved, duplicate, error,
+                and saving. The user can keep adding/removing in a
+                row without having the popover close or the list
+                flicker. The `saving` state disables the row buttons
+                to prevent double-clicks. */}
+            {(state.mode === "ready" || state.mode === "creating" ||
+              state.mode === "saved" || state.mode === "duplicate" ||
+              state.mode === "error" || state.mode === "saving") && (
+              state.lists.length === 0 ? (
+                <div className="px-3 py-4 text-center text-xs text-slate-500">
+                  No tenés listas todavía. Creá la primera abajo.
+                </div>
+              ) : (
+                state.lists.map((l) => {
+                  const alreadyIn = !!l.contains_business;
+                  const isSaving = state.mode === "saving";
+                  return (
+                    <button
+                      key={l.id}
+                      type="button"
+                      onClick={() => addToExistingList(l.id)}
+                      disabled={isSaving}
+                      className={`w-full text-left px-3 py-2 border-b border-white/5 last:border-b-0 flex items-center gap-2 group ${
+                        alreadyIn
+                          ? "bg-amber-500/5 hover:bg-amber-500/10"
+                          : "hover:bg-slate-800/70"
+                      } ${isSaving ? "opacity-60 cursor-wait" : ""}`}
+                    >
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{ backgroundColor: l.color === "sky" ? "#0ea5e9" : l.color === "emerald" ? "#10b981" : l.color === "amber" ? "#f59e0b" : l.color === "violet" ? "#8b5cf6" : l.color === "rose" ? "#f43f5e" : "#0ea5e9" }}
+                        aria-hidden="true"
+                      />
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-sm text-slate-100 truncate">
+                          {l.name}
                         </span>
-                      )}
-                    </span>
-                    {alreadyIn ? (
+                        {l.description && (
+                          <span className="block text-[10px] text-slate-500 truncate">
+                            {l.description}
+                          </span>
+                        )}
+                      </span>
+                      {alreadyIn ? (
                       <span
                         className="shrink-0 inline-flex items-center gap-1.5"
                         title="Este negocio ya está en esta lista"
@@ -351,49 +432,24 @@ export default function AddToListButton({
                     )}
                   </button>
                 );
-              })}
-
-            {state.mode === "saving" && (
-              <div className="px-3 py-4 text-center text-xs text-slate-400">
-                <span className="inline-block w-3 h-3 border-2 border-sky-400 border-t-transparent rounded-full animate-spin mr-1.5" />
-                Guardando...
-              </div>
-            )}
-
-            {state.mode === "saved" && (
-              <div className="px-3 py-4 text-center text-sm text-emerald-400 font-medium">
-                {state.message}
-              </div>
-            )}
-
-            {state.mode === "duplicate" && (
-              <div className="px-3 py-4 text-center text-sm text-amber-300 font-medium">
-                <span aria-hidden="true">ℹ️</span> {state.message}
-              </div>
-            )}
-
-            {state.mode === "error" && (
-              <div className="px-3 py-4 text-center text-xs text-red-400">
-                ⚠ {state.message}
-              </div>
-            )}
+              })
+            ))}
           </div>
 
-          {/* Footer: create new list */}
-          {(state.mode === "ready" || state.mode === "creating") && (
+          {/* Footer: create new list. Shown in every state that has
+              the list visible, so the user can keep creating lists
+              after adding/removing — the popover never closes on its
+              own. The "creating" state swaps the button for the
+              inline name input. We deliberately do NOT show the
+              footer during "saving" because the next click would be
+              another create (a different action), and we want a
+              visual pause so the user doesn't accidentally queue
+              multiple create requests. */}
+          {(state.mode === "ready" || state.mode === "creating" ||
+            state.mode === "saved" || state.mode === "duplicate" ||
+            state.mode === "error") && (
             <div className="border-t border-white/5 p-2 bg-slate-800/30">
-              {state.mode === "ready" ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setState({ mode: "creating", lists: state.lists, draft: "" })
-                  }
-                  className="w-full text-left px-2 py-1.5 text-xs text-sky-300 hover:bg-slate-800/70 rounded flex items-center gap-1.5"
-                >
-                  <span aria-hidden="true">+</span>
-                  <span>Crear nueva lista</span>
-                </button>
-              ) : (
+              {state.mode === "creating" ? (
                 <div className="flex items-center gap-1.5">
                   <input
                     ref={inputRef}
@@ -434,6 +490,17 @@ export default function AddToListButton({
                     ✕
                   </button>
                 </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setState({ mode: "creating", lists: state.lists, draft: "" })
+                  }
+                  className="w-full text-left px-2 py-1.5 text-xs text-sky-300 hover:bg-slate-800/70 rounded flex items-center gap-1.5"
+                >
+                  <span aria-hidden="true">+</span>
+                  <span>Crear nueva lista</span>
+                </button>
               )}
             </div>
           )}

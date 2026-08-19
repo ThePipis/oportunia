@@ -24,6 +24,11 @@ interface Business {
   distance_miles: number | null;
 }
 
+interface PipelineStatus {
+  in_pipeline: boolean;
+  stage: string | null;
+}
+
 interface ScoreData {
   business_id: string;
   total_score: number;
@@ -80,6 +85,7 @@ export default function BusinessProfilePage({
   const [score, setScore] = React.useState<ScoreData | null>(null);
   const [matchedServices, setMatchedServices] = React.useState<MatchedService[]>([]);
   const [talkingPoints, setTalkingPoints] = React.useState<TalkingPoint[]>([]);
+  const [pipeline, setPipeline] = React.useState<PipelineStatus>({ in_pipeline: false, stage: null });
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [rescoring, setRescoring] = React.useState(false);
@@ -89,7 +95,7 @@ export default function BusinessProfilePage({
   // Unwrap the params promise
   const unwrappedParams = React.use(params);
 
-  // Load business + score + matched services
+  // Load business + score + matched services + pipeline status
   React.useEffect(() => {
     async function load() {
       try {
@@ -103,6 +109,7 @@ export default function BusinessProfilePage({
         setBusiness(data.business);
         setScore(data.score);
         setMatchedServices(data.matchedServices ?? []);
+        setPipeline(data.pipeline ?? { in_pipeline: false, stage: null });
         setError(null);
       } catch (e: any) {
         setError(e.message ?? "Error al cargar negocio");
@@ -130,6 +137,7 @@ export default function BusinessProfilePage({
         const data = await fullRes.json();
         setScore(data.score);
         setMatchedServices(data.matchedServices ?? []);
+        setPipeline(data.pipeline ?? { in_pipeline: false, stage: null });
       }
     } catch (e: any) {
       setError(e.message);
@@ -240,7 +248,7 @@ export default function BusinessProfilePage({
 
         {/* Tier badge + actions */}
         {score && (
-          <Card>
+          <Card className="overflow-visible relative z-10">
             <CardContent className="pt-6 flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-3">
                 <span
@@ -270,6 +278,11 @@ export default function BusinessProfilePage({
                   businessId={business.id}
                   businessName={business.name}
                   compact={false}
+                  inPipeline={pipeline.in_pipeline}
+                  currentStage={pipeline.stage}
+                  onPipelineChange={(inPipeline, stage) => {
+                    setPipeline({ in_pipeline: inPipeline, stage });
+                  }}
                 />
                 <a
                   href={`/proposals/${business.id}`}
