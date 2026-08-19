@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import LocationSearch from "@/components/map/location-search";
 import CategoryMultiSelect from "@/components/map/category-multi-select";
+import IconAction from "@/components/map/icon-action";
 import type { BusinessMarker } from "@/lib/map/types";
 import { milesToMeters, metersToMiles } from "@/lib/utils/distance";
 import {
@@ -33,15 +34,6 @@ interface SearchResponse {
   saved: number;
   total_found: number;
   error?: string;
-}
-
-/**
- * Strip the protocol prefix from a URL so it fits in a tight column.
- * e.g. "https://www.example.com/path" -> "www.example.com/path"
- */
-function shortUrl(url: string | null | undefined): string {
-  if (!url) return "";
-  return url.replace(/^https?:\/\//, "").replace(/^www\./, "");
 }
 
 export default function RadarPage() {
@@ -350,38 +342,47 @@ export default function RadarPage() {
                 </div>
               </div>
 
-              {/* Wide results table */}
+              {/* Wide results table — responsive: icons in tight columns,
+                  progressive disclosure on smaller screens via Tailwind
+                  `hidden` / `table-cell` breakpoints. */}
               <div className="overflow-x-auto rounded-md border border-white/5">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-slate-900/60 text-[11px] uppercase tracking-wide text-slate-400 border-b border-white/5">
-                      <th className="text-left font-semibold py-2.5 pl-3 pr-2 w-[28%]">
+                      {/* Negocio: always visible, takes flexible width */}
+                      <th className="text-left font-semibold py-2.5 pl-3 pr-2">
                         Negocio
                       </th>
-                      <th className="text-left font-semibold py-2.5 px-2 w-[20%]">
-                        Dirección
+                      {/* Dirección: sm+ (640px+) */}
+                      <th className="text-left font-semibold py-2.5 px-2 hidden sm:table-cell w-[1%] whitespace-nowrap">
+                        Dir
                       </th>
-                      <th className="text-left font-semibold py-2.5 px-2 w-[14%]">
-                        Teléfono
+                      {/* Teléfono: always visible, narrow */}
+                      <th className="text-left font-semibold py-2.5 px-2 w-[1%] whitespace-nowrap">
+                        Tel
                       </th>
-                      <th className="text-left font-semibold py-2.5 px-2 w-[16%]">
+                      {/* Web: md+ (768px+) */}
+                      <th className="text-left font-semibold py-2.5 px-2 hidden md:table-cell w-[1%] whitespace-nowrap">
                         Web
                       </th>
-                      <th className="text-center font-semibold py-2.5 px-2 w-[8%]">
-                        ⭐ Rating
+                      {/* Rating: lg+ (1024px+) */}
+                      <th className="text-center font-semibold py-2.5 px-2 hidden lg:table-cell w-[1%] whitespace-nowrap">
+                        ⭐
                       </th>
-                      <th className="text-right font-semibold py-2.5 px-2 w-[7%]">
-                        Distancia
+                      {/* Distancia: lg+ (1024px+) */}
+                      <th className="text-right font-semibold py-2.5 px-2 hidden lg:table-cell w-[1%] whitespace-nowrap">
+                        Dist
                       </th>
-                      <th className="text-right font-semibold py-2.5 pl-2 pr-3 w-[7%]">
-                        Acciones
+                      {/* Perfil: always visible */}
+                      <th className="text-right font-semibold py-2.5 pl-2 pr-3 w-[1%] whitespace-nowrap">
+                        <span className="sm:hidden">Más</span>
+                        <span className="hidden sm:inline">Perfil</span>
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     {results.map((r) => {
                       const isSelected = r.id === effectiveSelectedId;
-                      const webShort = shortUrl(r.website);
                       const mapsHref = r.lat != null && r.lng != null
                         ? `https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lng}`
                         : null;
@@ -409,50 +410,37 @@ export default function RadarPage() {
                             )}
                           </td>
 
-                          {/* Address */}
-                          <td className="py-2.5 px-2 align-top text-slate-300 text-[12px]">
+                          {/* Address (sm+) — pin icon, hover tooltip, click → Google Maps */}
+                          <td className="py-2.5 px-2 align-top hidden sm:table-cell">
                             {r.address ? (
-                              <span className="line-clamp-2">{r.address}</span>
-                            ) : (
-                              <span className="text-slate-600">—</span>
-                            )}
+                              <IconAction
+                                value={r.address}
+                                kind="address"
+                                href={mapsHref ?? undefined}
+                              />
+                            ) : null}
                           </td>
 
-                          {/* Phone (click-to-call, stops row click) */}
-                          <td className="py-2.5 px-2 align-top text-[12px]">
+                          {/* Phone (always) — phone icon, hover tooltip, click → copy */}
+                          <td className="py-2.5 px-2 align-top">
                             {r.phone ? (
-                              <a
-                                href={`tel:${r.phone}`}
-                                onClick={(e) => e.stopPropagation()}
-                                className="text-sky-400 hover:text-sky-300 hover:underline tabular-nums"
-                              >
-                                {r.phone}
-                              </a>
-                            ) : (
-                              <span className="text-slate-600">—</span>
-                            )}
+                              <IconAction value={r.phone} kind="phone" />
+                            ) : null}
                           </td>
 
-                          {/* Web (click-to-open, stops row click) */}
-                          <td className="py-2.5 px-2 align-top text-[12px]">
-                            {webShort ? (
-                              <a
-                                href={r.website!}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="text-sky-400 hover:text-sky-300 hover:underline truncate inline-block max-w-full align-middle"
-                                title={r.website ?? undefined}
-                              >
-                                {webShort}
-                              </a>
-                            ) : (
-                              <span className="text-slate-600">—</span>
-                            )}
+                          {/* Web (md+) — link icon, hover tooltip, click → open new tab */}
+                          <td className="py-2.5 px-2 align-top hidden md:table-cell">
+                            {r.website ? (
+                              <IconAction
+                                value={r.website}
+                                kind="web"
+                                href={r.website}
+                              />
+                            ) : null}
                           </td>
 
-                          {/* Rating */}
-                          <td className="py-2.5 px-2 align-top text-center">
+                          {/* Rating (lg+) */}
+                          <td className="py-2.5 px-2 align-top text-center hidden lg:table-cell">
                             {r.rating != null ? (
                               <div className="inline-flex items-baseline gap-1">
                                 <span className="text-amber-400 font-bold text-[13px]">
@@ -464,46 +452,33 @@ export default function RadarPage() {
                                   </span>
                                 )}
                               </div>
-                            ) : (
-                              <span className="text-slate-600">—</span>
-                            )}
+                            ) : null}
                           </td>
 
-                          {/* Distance */}
-                          <td className="py-2.5 px-2 align-top text-right">
+                          {/* Distance (lg+) */}
+                          <td className="py-2.5 px-2 align-top text-right hidden lg:table-cell">
                             {r.distance_miles != null ? (
                               <span className="font-mono text-[12px] text-sky-300 tabular-nums">
                                 {r.distance_miles.toFixed(1)} mi
                               </span>
-                            ) : (
-                              <span className="text-slate-600">—</span>
-                            )}
+                            ) : null}
                           </td>
 
-                          {/* Actions */}
+                          {/* Perfil (always) — main CTA */}
                           <td className="py-2.5 pl-2 pr-3 align-top text-right">
                             <div
-                              className="inline-flex items-center gap-1.5"
+                              className="inline-flex items-center gap-1.5 justify-end"
                               onClick={(e) => e.stopPropagation()}
                             >
-                              {mapsHref && (
-                                <a
-                                  href={mapsHref}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  title="Abrir en Google Maps"
-                                  className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-slate-800/60 hover:bg-slate-700/80 text-slate-300 hover:text-white text-[14px] border border-white/5"
-                                >
-                                  🗺️
-                                </a>
-                              )}
                               <Link
                                 href={`/radar/${r.id}`}
                                 title="Ver perfil completo + talking points"
                                 className="inline-flex items-center gap-1 px-2.5 h-7 rounded-md bg-orange-500/90 hover:bg-orange-500 text-white text-[11px] font-semibold border border-orange-400/50"
                               >
-                                Perfil
-                                <span aria-hidden="true">→</span>
+                                <span className="hidden sm:inline">Perfil</span>
+                                <span className="sm:hidden">→</span>
+                                <span aria-hidden="true" className="hidden sm:inline">→</span>
+                                <span aria-hidden="true" className="sm:hidden">Ver</span>
                               </Link>
                             </div>
                           </td>
