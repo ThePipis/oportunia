@@ -140,13 +140,18 @@ export default function AddToListButton({
     }
   };
 
-  const createAndAdd = async () => {
+  const createListOnly = async () => {
     if (state.mode !== "creating") return;
     const name = state.draft.trim();
     if (!name) return;
     setState({ mode: "saving" });
     try {
-      // 1) Create the list
+      // Create the list. We intentionally do NOT add the current
+      // business to the new list — the user might want an empty
+      // list to add businesses to later, or might want to pick
+      // different businesses. The new list row shows up immediately
+      // in the popover with the regular "+ Agregar" affordance, so
+      // the user can add the business (or others) manually.
       const createRes = await fetch("/api/lists", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -157,19 +162,13 @@ export default function AddToListButton({
         throw new Error(err.error || "Error al crear lista");
       }
       const { list } = await createRes.json();
-      // 2) Add the business to it
-      const addRes = await fetch(`/api/lists/${list.id}/items/${businessId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      if (!addRes.ok) {
-        const err = await addRes.json().catch(() => ({}));
-        throw new Error(err.error || "Error al agregar");
-      }
+      // Switch back to the list view and prepend the new list so it
+      // appears at the top (matches /api/lists ORDER BY created_at
+      // DESC). Mark contains_business: false so the row renders the
+      // normal "+ Agregar" hover hint, not the "Ya está" amber badge.
       setState({
-        mode: "saved",
-        message: `✓ Creado "${name}" + agregado`,
+        mode: "ready",
+        lists: [{ ...list, contains_business: false }, ...state.lists],
       });
     } catch (e: any) {
       setState({ mode: "error", message: e?.message || "Error" });
@@ -340,7 +339,7 @@ export default function AddToListButton({
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
-                        createAndAdd();
+                        createListOnly();
                       } else if (e.key === "Escape") {
                         setState({ mode: "ready", lists: state.lists });
                       }
@@ -350,7 +349,7 @@ export default function AddToListButton({
                   />
                   <button
                     type="button"
-                    onClick={createAndAdd}
+                    onClick={createListOnly}
                     disabled={!state.draft.trim()}
                     className="px-2 py-1 text-xs bg-sky-500 hover:bg-sky-400 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded font-medium"
                   >
