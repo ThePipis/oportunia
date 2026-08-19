@@ -43,6 +43,14 @@ interface IconActionProps {
   label?: string;
   /** If provided, the button becomes an external link instead of copy */
   href?: string;
+  /**
+   * Google search query to use when `value` is missing. When provided
+   * and value is empty, the button renders a dashed "?" icon that
+   * opens a Google search for this query on click — turning empty
+   * cells into a useful "look it up on Google" action instead of a
+   * dead "—" dash.
+   */
+  fallbackQuery?: string;
   /** Tooltip placement relative to the icon */
   placement?: "top" | "bottom";
   /** Force disabled state (renders as muted "—" instead of an icon) */
@@ -57,6 +65,7 @@ export default function IconAction({
   icon,
   label,
   href,
+  fallbackQuery,
   placement = "top",
   disabled = false,
   className,
@@ -64,11 +73,24 @@ export default function IconAction({
   const [hovered, setHovered] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
 
+  const hasValue = Boolean(value && value.trim().length > 0);
+  const canFallback = !hasValue && Boolean(fallbackQuery && fallbackQuery.trim().length > 0);
+
   const handleClick = React.useCallback(
     async (e: React.MouseEvent | React.TouchEvent) => {
       e.stopPropagation();
       e.preventDefault();
-      if (disabled || !value) return;
+      if (disabled) return;
+
+      // Empty value + fallback query: open Google search
+      if (canFallback && fallbackQuery) {
+        const url = `https://www.google.com/search?q=${encodeURIComponent(fallbackQuery)}`;
+        window.open(url, "_blank", "noopener,noreferrer");
+        return;
+      }
+
+      if (!hasValue) return;
+
       if (href) {
         window.open(href, "_blank", "noopener,noreferrer");
         return;
@@ -93,10 +115,65 @@ export default function IconAction({
         /* clipboard blocked — no-op */
       }
     },
-    [value, href, disabled]
+    [value, href, disabled, canFallback, fallbackQuery, hasValue]
   );
 
-  if (disabled || !value) {
+  // ───────── Render branches ─────────
+  if (disabled) {
+    return (
+      <span
+        className="inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-700 text-[14px]"
+        title="No disponible"
+        aria-label="No disponible"
+      >
+        —
+      </span>
+    );
+  }
+
+  // Empty value + fallback: dashed "?" icon that opens a Google search.
+  // We don't make up data — we give the user a way to look it up themselves.
+  if (!hasValue && canFallback) {
+    return (
+      <button
+        type="button"
+        onClick={handleClick}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onFocus={() => setHovered(true)}
+        onBlur={() => setHovered(false)}
+        className={cn(
+          "relative inline-flex items-center justify-center w-7 h-7 rounded-md",
+          "bg-transparent border border-dashed border-slate-600 hover:border-sky-500/70",
+          "text-slate-500 hover:text-sky-300",
+          "transition-colors",
+          "text-[12px] leading-none",
+          className
+        )}
+        title="No disponible en Google Places — buscar en Google"
+        aria-label="No disponible — buscar en Google"
+      >
+        <span aria-hidden="true">?</span>
+        {hovered && (
+          <span
+            role="tooltip"
+            className={cn(
+              "absolute z-50 px-2 py-1 rounded text-[11px] whitespace-nowrap pointer-events-none",
+              "shadow-lg border bg-slate-900 text-slate-100 border-white/15 tooltip-enter",
+              placement === "top"
+                ? "bottom-full left-1/2 -translate-x-1/2 mb-1.5"
+                : "top-full left-1/2 -translate-x-1/2 mt-1.5"
+            )}
+          >
+            🔍 Buscar en Google
+          </span>
+        )}
+      </button>
+    );
+  }
+
+  // Empty value + no fallback: graceful "—" placeholder (truly unknown)
+  if (!hasValue) {
     return (
       <span
         className="inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-700 text-[14px]"

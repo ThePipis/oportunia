@@ -582,36 +582,43 @@ export default function RadarPage() {
                             )}
                           </td>
 
-                          {/* Address (sm+) — pin icon, hover tooltip, click → Google Maps */}
+                          {/* Address (sm+) — pin icon, hover tooltip, click → Google Maps.
+                              If the value is missing in Google Places, fall back to a
+                              dashed "?" icon that opens a Google search for the
+                              business. */}
                           <td className="py-2.5 px-2 align-top hidden sm:table-cell">
-                            {r.address ? (
-                              <IconAction
-                                value={r.address}
-                                kind="address"
-                                href={mapsHref ?? undefined}
-                              />
-                            ) : null}
+                            <IconAction
+                              value={r.address ?? ""}
+                              kind="address"
+                              href={mapsHref ?? undefined}
+                              fallbackQuery={`${r.name} ${city} dirección`}
+                            />
                           </td>
 
-                          {/* Phone (always) — phone icon, hover tooltip, click → copy */}
+                          {/* Phone (always) — phone icon, hover tooltip, click → copy.
+                              Missing value → dashed "?" icon → Google search fallback. */}
                           <td className="py-2.5 px-2 align-top">
-                            {r.phone ? (
-                              <IconAction value={r.phone} kind="phone" />
-                            ) : null}
+                            <IconAction
+                              value={r.phone ?? ""}
+                              kind="phone"
+                              fallbackQuery={`${r.name} ${city} teléfono contacto`}
+                            />
                           </td>
 
-                          {/* Web (md+) — link icon, hover tooltip, click → open new tab */}
+                          {/* Web (md+) — link icon, hover tooltip, click → open new tab.
+                              Missing value → dashed "?" icon → Google search fallback. */}
                           <td className="py-2.5 px-2 align-top hidden md:table-cell">
-                            {r.website ? (
-                              <IconAction
-                                value={r.website}
-                                kind="web"
-                                href={r.website}
-                              />
-                            ) : null}
+                            <IconAction
+                              value={r.website ?? ""}
+                              kind="web"
+                              href={r.website ?? undefined}
+                              fallbackQuery={`${r.name} ${city} sitio web oficial`}
+                            />
                           </td>
 
-                          {/* Rating (lg+) */}
+                          {/* Rating (lg+) — missing = "—". We don't show a "search"
+                              fallback here because rating can't meaningfully be looked
+                              up on Google for a single business. */}
                           <td className="py-2.5 px-2 align-top text-center hidden lg:table-cell">
                             {r.rating != null ? (
                               <div className="inline-flex items-baseline gap-1">
@@ -624,10 +631,19 @@ export default function RadarPage() {
                                   </span>
                                 )}
                               </div>
-                            ) : null}
+                            ) : (
+                              <span
+                                className="inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-700 text-[14px]"
+                                title="Sin rating en Google Places"
+                                aria-label="Sin rating"
+                              >
+                                —
+                              </span>
+                            )}
                           </td>
 
-                          {/* Distance (lg+) */}
+                          {/* Distance (lg+) — distance is always computed by our API
+                              from the business's lat/lng, so this is never empty. */}
                           <td className="py-2.5 px-2 align-top text-right hidden lg:table-cell">
                             {r.distance_miles != null ? (
                               <span className="font-mono text-[12px] text-sky-300 tabular-nums">
