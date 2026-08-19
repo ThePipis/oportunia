@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useT } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,10 @@ import LocationSearch from "@/components/map/location-search";
 import CategoryMultiSelect from "@/components/map/category-multi-select";
 import type { BusinessMarker } from "@/lib/map/types";
 import { milesToMeters, metersToMiles } from "@/lib/utils/distance";
+import {
+  useRadarSearchState,
+  type SearchResult,
+} from "@/lib/hooks/use-radar-search-state";
 
 // Leaflet uses `window`, so the map must be dynamically imported with ssr:false
 const RadarMap = dynamic(() => import("@/components/map/radar-map"), {
@@ -24,21 +29,6 @@ const RadarMap = dynamic(() => import("@/components/map/radar-map"), {
   ),
 });
 
-interface SearchResult {
-  id: string;
-  name: string;
-  address: string | null;
-  city: string | null;
-  rating: number | null;
-  review_count: number | null;
-  distance_miles: number | null;
-  primary_type: string | null;
-  lat?: number | null;
-  lng?: number | null;
-  phone?: string | null;
-  website?: string | null;
-}
-
 interface SearchResponse {
   results: SearchResult[];
   saved: number;
@@ -46,39 +36,27 @@ interface SearchResponse {
   error?: string;
 }
 
-// Default origin: 7940 Vandewater St, Eastvale, CA (user's home)
-const DEFAULT_ORIGIN = {
-  lat: 33.9425,
-  lng: -117.5632,
-};
-
-// Default location text shown in the LocationSearch input
-const DEFAULT_LOCATION_TEXT = "7940 Vandewater St, Eastvale, CA 92880";
-
 export default function RadarPage() {
   const { t } = useT();
+  const { state, update, clear, hydrated } = useRadarSearchState();
 
-  // Form state
-  const [query, setQuery] = React.useState("");
-  const [city, setCity] = React.useState(DEFAULT_LOCATION_TEXT);
-  const [radiusMiles, setRadiusMiles] = React.useState(5);
-  const [maxResults, setMaxResults] = React.useState(15);
-  // Multi-select: array of category ids. The free-text `query` is a custom
-  // override (e.g. "open 24/7") that gets appended to each category search.
-  const [selectedCategoryIds, setSelectedCategoryIds] = React.useState<string[]>(
-    []
-  );
+  // Destructure the persisted state for convenient access in JSX / handlers
+  const {
+    query,
+    selectedCategoryIds,
+    city,
+    radiusMiles,
+    maxResults,
+    origin,
+    selectedBusinessId,
+    results,
+    totalFound,
+    searched,
+  } = state;
 
-  // Search state
+  // Transient (not persisted): loading + error. These reset on every mount.
   const [loading, setLoading] = React.useState(false);
-  const [results, setResults] = React.useState<SearchResult[]>([]);
   const [error, setError] = React.useState<string | null>(null);
-  const [searched, setSearched] = React.useState(false);
-  const [totalFound, setTotalFound] = React.useState(0);
-
-  // Map state
-  const [origin, setOrigin] = React.useState(DEFAULT_ORIGIN);
-  const [selectedBusinessId, setSelectedBusinessId] = React.useState<string | null>(null);
 
   // The active search query: prefer the multi-select categories; if none
   // selected, fall back to free-text `query`. The actual category queries
@@ -91,8 +69,7 @@ export default function RadarPage() {
 
     setLoading(true);
     setError(null);
-    setSearched(true);
-    setSelectedBusinessId(null);
+    update({ searched: true, selectedBusinessId: null });
 
     try {
       const res = await fetch("/api/radar/search", {
@@ -110,16 +87,17 @@ export default function RadarPage() {
       const data: SearchResponse = await res.json();
       if (!res.ok) {
         setError(data.error ?? `Error ${res.status}`);
-        setResults([]);
-        setTotalFound(0);
+        update({ results: [], totalFound: 0 });
       } else {
-        setResults(data.results ?? []);
-        setTotalFound(data.total_found ?? 0);
+        update({
+          results: data.results ?? [],
+          totalFound: data.total_found ?? 0,
+        });
         if (data.error) setError(data.error);
       }
     } catch (err: any) {
       setError(err.message ?? "Error desconocido");
-      setResults([]);
+      update({ results: [] });
     } finally {
       setLoading(false);
     }
@@ -146,6 +124,18 @@ export default function RadarPage() {
 
   const selectedBusiness = mapMarkers.find((b) => b.id === selectedBusinessId) ?? null;
 
+  // Track which business is "highlighted" because the user just clicked it
+  // in the list. The highlight survives navigation back to the radar even
+  // though the list item itself is now a Link to the full profile.
+  const [hoveredBusinessId, setHoveredBusinessId] = React.useState<
+    string | null
+  >(null);
+
+  // After hydration, if there was a selected business from the persisted
+  // state, keep it visible (e.g. so the map marker stays highlighted after
+  // the user returns from a profile page).
+  const effectiveSelectedId = hoveredBusinessId ?? selectedBusinessId;
+
   return (
     <main className="min-h-screen bg-gradient-radial">
       <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-4">
@@ -165,6 +155,23 @@ export default function RadarPage() {
             <a href="/tools" className="text-sky-400 hover:text-sky-300">Tools</a>
           </div>
         </div>
+
+        {/* Restored-search banner — only visible right after hydration
+            if there's a previously-saved search to show. Tells the user
+            "we remembered your last search" so they aren't confused. */}
+        {hydrated && searched && results.length > 0 && (
+          <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-sky-500/10 border border-sky-500/30 text-xs text-sky-300">
+            <span>
+              🔁 Búsqueda anterior restaurada ({results.length} resultados)
+            </span>
+            <button
+              onClick={clear}
+              className="text-sky-300 hover:text-sky-100 underline underline-offset-2"
+            >
+              Limpiar y empezar de nuevo
+            </button>
+          </div>
+        )}
 
         {/* Error banner */}
         {error && (
@@ -196,16 +203,24 @@ export default function RadarPage() {
             <RadarMap
               center={origin}
               radiusMeters={milesToMeters(radiusMiles)}
-              onRadiusChange={(m) => setRadiusMiles(metersToMiles(m))}
+              onRadiusChange={(m) =>
+                update({ radiusMiles: metersToMiles(m) })
+              }
               businesses={mapMarkers}
-              selectedId={selectedBusinessId}
-              onCenterChange={(lat, lng) => setOrigin({ lat, lng })}
-              onSelectBusiness={setSelectedBusinessId}
+              selectedId={effectiveSelectedId}
+              onCenterChange={(lat, lng) => update({ origin: { lat, lng } })}
+              onSelectBusiness={(id) => {
+                setHoveredBusinessId(id);
+                update({ selectedBusinessId: id });
+              }}
             />
             <BusinessSidePanel
               business={selectedBusiness}
               origin={origin}
-              onClose={() => setSelectedBusinessId(null)}
+              onClose={() => {
+                setHoveredBusinessId(null);
+                update({ selectedBusinessId: null });
+              }}
             />
           </div>
 
@@ -218,10 +233,10 @@ export default function RadarPage() {
                   <div className="space-y-2">
                     <Label htmlFor="city">Ubicación</Label>
                     <LocationSearch
-                      value={city}
-                      onChange={setCity}
+                      value={hydrated ? city : ""}
+                      onChange={(v) => update({ city: v })}
                       onLocationSelect={(lat, lng) =>
-                        setOrigin({ lat, lng })
+                        update({ origin: { lat, lng } })
                       }
                       placeholder="Ciudad, dirección, avenida o lugar..."
                     />
@@ -234,7 +249,7 @@ export default function RadarPage() {
                     <Label>Categoría</Label>
                     <CategoryMultiSelect
                       value={selectedCategoryIds}
-                      onChange={setSelectedCategoryIds}
+                      onChange={(v) => update({ selectedCategoryIds: v })}
                     />
                   </div>
 
@@ -244,7 +259,7 @@ export default function RadarPage() {
                       id="query"
                       placeholder="ej. 'abierto 24/7' o 'acepta efectivo'"
                       value={query}
-                      onChange={(e) => setQuery(e.target.value)}
+                      onChange={(e) => update({ query: e.target.value })}
                     />
                     <p className="text-[11px] text-slate-500">
                       Se agrega a cada categoría seleccionada. Ej: HVAC + "abierto 24/7".
@@ -262,21 +277,43 @@ export default function RadarPage() {
                       min="5"
                       max="40"
                       value={maxResults}
-                      onChange={(e) => setMaxResults(parseInt(e.target.value))}
+                      onChange={(e) =>
+                        update({ maxResults: parseInt(e.target.value) })
+                      }
                       className="w-full h-1.5 bg-slate-800 rounded-full appearance-none cursor-pointer accent-sky-500"
                     />
                   </div>
 
-                  <Button type="submit" disabled={loading} size="lg" className="w-full">
-                    {loading ? (
-                      <>
-                        <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        Buscando...
-                      </>
-                    ) : (
-                      <>🔍 Buscar en el mapa</>
+                  <div className="flex gap-2">
+                    <Button
+                      type="submit"
+                      disabled={loading}
+                      size="lg"
+                      className="flex-1"
+                    >
+                      {loading ? (
+                        <>
+                          <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Buscando...
+                        </>
+                      ) : (
+                        <>🔍 Buscar en el mapa</>
+                      )}
+                    </Button>
+                    {(searched || query || selectedCategoryIds.length > 0) && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="lg"
+                        onClick={clear}
+                        aria-label="Limpiar búsqueda"
+                        title="Limpiar búsqueda"
+                        className="shrink-0"
+                      >
+                        ✕
+                      </Button>
                     )}
-                  </Button>
+                  </div>
                 </form>
               </CardContent>
             </Card>
@@ -308,17 +345,28 @@ export default function RadarPage() {
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-sm">
                       <span className="font-bold text-sky-400">{results.length}</span>{" "}
-                      <span className="text-slate-400">negocios</span>
+                      <span className="text-slate-400">de </span>
+                      <span className="font-mono text-xs text-slate-500">{totalFound}</span>{" "}
+                      <span className="text-slate-400">encontrados</span>
                     </p>
+                    <button
+                      onClick={clear}
+                      className="text-[11px] text-slate-400 hover:text-slate-100 underline underline-offset-2"
+                    >
+                      Nueva búsqueda
+                    </button>
                   </div>
                   <div className="space-y-1.5 max-h-[400px] overflow-y-auto pr-1">
                     {results.map((r) => {
-                      const isSelected = r.id === selectedBusinessId;
+                      const isSelected = r.id === effectiveSelectedId;
                       return (
-                        <button
+                        <Link
                           key={r.id}
-                          onClick={() => setSelectedBusinessId(r.id)}
-                          className={`w-full text-left p-2 rounded-md border transition-colors ${
+                          href={`/radar/${r.id}`}
+                          onMouseEnter={() => setHoveredBusinessId(r.id)}
+                          onMouseLeave={() => setHoveredBusinessId(null)}
+                          onClick={() => update({ selectedBusinessId: r.id })}
+                          className={`block w-full text-left p-2 rounded-md border transition-colors ${
                             isSelected
                               ? "bg-orange-500/15 border-orange-500/40"
                               : "bg-slate-900/40 border-white/5 hover:bg-slate-800/50"
@@ -346,7 +394,7 @@ export default function RadarPage() {
                               )}
                             </div>
                           </div>
-                        </button>
+                        </Link>
                       );
                     })}
                   </div>
@@ -354,7 +402,7 @@ export default function RadarPage() {
               </Card>
             )}
 
-            {!searched && !loading && (
+            {!searched && !loading && hydrated && (
               <Card>
                 <CardContent className="py-6 text-center">
                   <div className="text-2xl mb-2">◎</div>
