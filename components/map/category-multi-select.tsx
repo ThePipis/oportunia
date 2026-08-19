@@ -105,6 +105,48 @@ export default function CategoryMultiSelect({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Fetch the details of any selected categories we don't have in
+  // `selectedDetails` yet. Needed for two cases:
+  //   1. Page load with persisted value (value arrives AFTER first render
+  //      so a mount-only effect would miss it).
+  //   2. Defensive: if the cache is ever cleared, we re-fetch.
+  // We use a ref to track which ids we've already requested so we don't
+  // re-fetch on every render. New selections added by the user go through
+  // `addCategory` which updates the cache directly.
+  const fetchedIdsRef = React.useRef<Set<string>>(new Set());
+  React.useEffect(() => {
+    if (value.length === 0) return;
+    const missing = value.filter((id) => !fetchedIdsRef.current.has(id));
+    if (missing.length === 0) return;
+    // Optimistically mark as fetched to prevent duplicate requests from
+    // rapid re-renders before the response arrives.
+    missing.forEach((id) => fetchedIdsRef.current.add(id));
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/categories?mode=byIds&ids=${encodeURIComponent(missing.join(","))}`
+        ).then((r) => r.json());
+        if (cancelled) return;
+        const items: CategoryOption[] = (res.results || []) as CategoryOption[];
+        if (items.length === 0) return;
+        setSelectedDetails((prev) => {
+          const next = new Map(prev);
+          for (const c of items) next.set(c.id, c);
+          return next;
+        });
+      } catch {
+        // Non-fatal: tags may be missing but the count is still correct.
+        // Undo the optimistic mark so a future render can retry.
+        missing.forEach((id) => fetchedIdsRef.current.delete(id));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [value]);
+
   // Refresh top list when selection changes (to exclude newly selected)
   React.useEffect(() => {
     let cancelled = false;

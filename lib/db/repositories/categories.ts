@@ -83,6 +83,19 @@ export function getCategoryById(id: string): Category | null {
 }
 
 /**
+ * Get multiple categories by id. Order is not guaranteed (use the order
+ * from the input if you need it). Missing ids are silently skipped.
+ */
+export function getCategoriesByIds(ids: string[]): Category[] {
+  if (ids.length === 0) return [];
+  const db = getDb();
+  const placeholders = ids.map(() => "?").join(",");
+  return db
+    .prepare(`SELECT * FROM categories WHERE id IN (${placeholders})`)
+    .all(...ids) as Category[];
+}
+
+/**
  * Get all quick-pick categories (the 12 always-visible chips).
  */
 export function listQuickPicks(): Category[] {

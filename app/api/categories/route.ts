@@ -13,6 +13,7 @@ import {
   listQuickPicks,
   listMostUsed,
   incrementUsageBatch,
+  getCategoriesByIds,
 } from "@/lib/db/repositories/categories";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,8 @@ export async function GET(req: NextRequest) {
   const q = url.searchParams.get("q")?.trim() || "";
   const limit = Math.min(parseInt(url.searchParams.get("limit") || "8", 10) || 8, 50);
   const excludeParam = url.searchParams.get("exclude") || "";
-  const mode = url.searchParams.get("mode") || "search"; // "search" | "all" | "quick" | "top"
+  const mode = url.searchParams.get("mode") || "search"; // "search" | "all" | "quick" | "top" | "byIds"
+  const idsParam = url.searchParams.get("ids") || "";
   const exclude = new Set(excludeParam.split(",").map((s) => s.trim()).filter(Boolean));
 
   try {
@@ -36,6 +38,11 @@ export async function GET(req: NextRequest) {
     }
     if (mode === "top") {
       const items = listMostUsed(limit, exclude);
+      return NextResponse.json({ results: items });
+    }
+    if (mode === "byIds") {
+      const ids = idsParam.split(",").map((s) => s.trim()).filter(Boolean);
+      const items = getCategoriesByIds(ids);
       return NextResponse.json({ results: items });
     }
     // default: search
