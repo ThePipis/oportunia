@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import AddToCrmButton from "@/components/map/add-to-crm-button";
 
 interface ListItem {
   list_id: string;
@@ -29,12 +30,37 @@ export default function ListDetailPage({
   const unwrapped = React.use(params);
   const [data, setData] = React.useState<ListData | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [removingId, setRemovingId] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
+  const reload = React.useCallback(() => {
     fetch(`/api/lists/${unwrapped.id}`)
       .then((r) => r.json())
       .then((d) => { setData(d); setLoading(false); });
   }, [unwrapped.id]);
+
+  React.useEffect(() => {
+    reload();
+  }, [reload]);
+
+  const removeItem = async (businessId: string, name: string) => {
+    if (!confirm(`¿Quitar "${name}" de esta lista?`)) return;
+    setRemovingId(businessId);
+    try {
+      const res = await fetch(
+        `/api/lists/${unwrapped.id}/items/${businessId}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Error ${res.status}`);
+      }
+      reload();
+    } catch (e: any) {
+      alert(`Error al quitar: ${e.message}`);
+    } finally {
+      setRemovingId(null);
+    }
+  };
 
   const exportCSV = () => {
     if (!data) return;
@@ -107,6 +133,28 @@ export default function ListDetailPage({
                       <span className="text-[10px] text-slate-500 ml-1">/100</span>
                     </div>
                   )}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <AddToCrmButton
+                      businessId={it.business_id}
+                      businessName={it.business_name}
+                    />
+                    <button
+                      onClick={() => removeItem(it.business_id, it.business_name)}
+                      disabled={removingId === it.business_id}
+                      className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-red-500/10 hover:bg-red-500/25 border border-red-500/30 hover:border-red-500/60 text-red-300 hover:text-red-100 transition-colors disabled:opacity-50 text-[14px]"
+                      title="Quitar de la lista"
+                      aria-label={`Quitar ${it.business_name} de la lista`}
+                    >
+                      {removingId === it.business_id ? (
+                        <span
+                          className="inline-block w-3 h-3 border-2 border-red-300 border-t-transparent rounded-full animate-spin"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <span aria-hidden="true">✕</span>
+                      )}
+                    </button>
+                  </div>
                 </CardContent>
               </Card>
             ))}

@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BusinessHeader } from "@/components/business/business-header";
 import { ScoreBreakdown } from "@/components/scoring/score-breakdown";
+import AddToListButton from "@/components/map/add-to-list-button";
+import AddToCrmButton from "@/components/map/add-to-crm-button";
 
 interface Business {
   id: string;
@@ -250,7 +252,7 @@ export default function BusinessProfilePage({
                   Score calculado · {new Date(score.business_id ? Date.now() : Date.now()).toLocaleDateString()}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Button
                   variant="secondary"
                   size="sm"
@@ -259,6 +261,16 @@ export default function BusinessProfilePage({
                 >
                   {rescoring ? "Recalculando..." : "🔄 Recalcular score"}
                 </Button>
+                <AddToListButton
+                  businessId={business.id}
+                  businessName={business.name}
+                  compact={false}
+                />
+                <AddToCrmButton
+                  businessId={business.id}
+                  businessName={business.name}
+                  compact={false}
+                />
                 <a
                   href={`/proposals/${business.id}`}
                   className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-semibold bg-gradient-to-br from-orange-500 to-orange-700 text-white shadow-lg shadow-orange-500/30 hover:-translate-y-0.5 transition-all"

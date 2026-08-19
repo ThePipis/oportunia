@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 import LocationSearch from "@/components/map/location-search";
 import CategoryMultiSelect from "@/components/map/category-multi-select";
 import IconAction from "@/components/map/icon-action";
+import AddToListButton from "@/components/map/add-to-list-button";
+import AddToCrmButton from "@/components/map/add-to-crm-button";
 import type { BusinessMarker } from "@/lib/map/types";
 import { milesToMeters, metersToMiles } from "@/lib/utils/distance";
 import {
@@ -652,12 +654,22 @@ export default function RadarPage() {
                             ) : null}
                           </td>
 
-                          {/* Perfil (always) — main CTA */}
+                          {/* Quick actions + Perfil (always) — main CTA group.
+                              The +Lista and +Pipeline buttons let the user act on
+                              the result without leaving the radar page. */}
                           <td className="py-2.5 pl-2 pr-3 align-top text-right">
                             <div
-                              className="inline-flex items-center gap-1.5 justify-end"
+                              className="inline-flex items-center gap-1.5 justify-end flex-wrap"
                               onClick={(e) => e.stopPropagation()}
                             >
+                              <AddToListButton
+                                businessId={r.id}
+                                businessName={r.name}
+                              />
+                              <AddToCrmButton
+                                businessId={r.id}
+                                businessName={r.name}
+                              />
                               <Link
                                 href={`/radar/${r.id}`}
                                 title="Ver perfil completo + talking points"
