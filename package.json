@@ -11,6 +11,7 @@
     "db:migrate": "node --experimental-sqlite --import tsx lib/db/migrate.ts",
     "db:seed-tools": "node --experimental-sqlite --import tsx lib/db/seed-tools.ts",
     "db:seed-services": "node --experimental-sqlite --import tsx lib/db/seed-services.ts",
+    "db:seed-categories": "node --experimental-sqlite --import tsx lib/db/seed-categories.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

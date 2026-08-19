@@ -22,7 +22,7 @@ function addColumnIfMissing(table: string, column: string, ddl: string): boolean
   return true;
 }
 
-function main() {
+async function main() {
   console.log("🔧 Ejecutando migraciones...");
 
   if (!fs.existsSync(SCHEMA_PATH)) {
@@ -72,6 +72,19 @@ function main() {
     "INSERT OR REPLACE INTO schema_version (version, description) VALUES (?, ?)"
   );
   insertVersion.run(2, "Multi-account API keys for Gemini Pro (tool_api_keys table)");
+
+  // Auto-seed categorías si la tabla está vacía
+  const catCount = (db.prepare("SELECT COUNT(*) as c FROM categories").get() as { c: number }).c;
+  if (catCount === 0) {
+    const { execSync } = await import("node:child_process");
+    try {
+      execSync("npm run db:seed-categories", { stdio: "inherit", cwd: process.cwd() });
+    } catch (e) {
+      console.warn("   ⚠️  No se pudo auto-seed categorías:", (e as Error).message);
+    }
+  } else {
+    console.log(`   ↪ ${catCount} categorías ya en DB (skip seed)`);
+  }
 
   // Verificar tablas creadas
   const tables = db

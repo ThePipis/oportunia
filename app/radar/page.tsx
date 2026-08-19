@@ -7,9 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import RadiusSlider from "@/components/map/radius-slider";
-import CategoryChips, { CATEGORY_PRESETS } from "@/components/map/category-chips";
 import BusinessSidePanel from "@/components/map/business-side-panel";
+import LocationSearch from "@/components/map/location-search";
+import CategoryMultiSelect from "@/components/map/category-multi-select";
 import type { BusinessMarker } from "@/lib/map/types";
 import { milesToMeters, metersToMiles } from "@/lib/utils/distance";
 
@@ -52,29 +52,22 @@ const DEFAULT_ORIGIN = {
   lng: -117.5632,
 };
 
-const CITY_PRESETS = [
-  "Eastvale, CA",
-  "Corona, CA",
-  "Norco, CA",
-  "Riverside, CA",
-  "Ontario, CA",
-  "Chino Hills, CA",
-  "Rancho Cucamonga, CA",
-  "Fontana, CA",
-  "Moreno Valley, CA",
-  "Temecula, CA",
-];
+// Default location text shown in the LocationSearch input
+const DEFAULT_LOCATION_TEXT = "7940 Vandewater St, Eastvale, CA 92880";
 
 export default function RadarPage() {
   const { t } = useT();
 
   // Form state
   const [query, setQuery] = React.useState("");
-  const [city, setCity] = React.useState("Corona, CA");
+  const [city, setCity] = React.useState(DEFAULT_LOCATION_TEXT);
   const [radiusMiles, setRadiusMiles] = React.useState(5);
   const [maxResults, setMaxResults] = React.useState(15);
-  const [categoryPreset, setCategoryPreset] = React.useState("hvac");
-  const [customCategory, setCustomCategory] = React.useState("");
+  // Multi-select: array of category ids. The free-text `query` is a custom
+  // override (e.g. "open 24/7") that gets appended to each category search.
+  const [selectedCategoryIds, setSelectedCategoryIds] = React.useState<string[]>(
+    []
+  );
 
   // Search state
   const [loading, setLoading] = React.useState(false);
@@ -87,12 +80,14 @@ export default function RadarPage() {
   const [origin, setOrigin] = React.useState(DEFAULT_ORIGIN);
   const [selectedBusinessId, setSelectedBusinessId] = React.useState<string | null>(null);
 
-  // The active search query (chips override custom text)
-  const activeCategory = customCategory.trim() || categoryPreset;
+  // The active search query: prefer the multi-select categories; if none
+  // selected, fall back to free-text `query`. The actual category queries
+  // are resolved by the API by looking up the selected ids in the DB.
+  const canSearch = selectedCategoryIds.length > 0 || query.trim().length > 0;
 
   const handleSearch = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!activeCategory) return;
+    if (!canSearch) return;
 
     setLoading(true);
     setError(null);
@@ -100,13 +95,12 @@ export default function RadarPage() {
     setSelectedBusinessId(null);
 
     try {
-      const locationQuery = `${activeCategory} in ${city}`.trim();
-
       const res = await fetch("/api/radar/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          query: locationQuery,
+          query: query.trim(),
+          categoryIds: selectedCategoryIds,
           origin,
           radiusMiles,
           maxResults,
@@ -202,6 +196,7 @@ export default function RadarPage() {
             <RadarMap
               center={origin}
               radiusMeters={milesToMeters(radiusMiles)}
+              onRadiusChange={(m) => setRadiusMiles(metersToMiles(m))}
               businesses={mapMarkers}
               selectedId={selectedBusinessId}
               onCenterChange={(lat, lng) => setOrigin({ lat, lng })}
@@ -221,37 +216,40 @@ export default function RadarPage() {
               <CardContent className="pt-6 space-y-4">
                 <form onSubmit={handleSearch} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="city">Ciudad</Label>
-                    <select
-                      id="city"
-                      className="flex h-10 w-full rounded-md border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                    <Label htmlFor="city">Ubicación</Label>
+                    <LocationSearch
                       value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                    >
-                      {CITY_PRESETS.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setCity}
+                      onLocationSelect={(lat, lng) =>
+                        setOrigin({ lat, lng })
+                      }
+                      placeholder="Ciudad, dirección, avenida o lugar..."
+                    />
+                    <p className="text-[11px] text-slate-500">
+                      Escribí cualquier ciudad, calle o lugar del mundo. El pin del mapa se mueve al seleccionar.
+                    </p>
                   </div>
 
-                  <CategoryChips value={customCategory} onChange={setCustomCategory} />
-
                   <div className="space-y-2">
-                    <Label htmlFor="query">Búsqueda personalizada</Label>
-                    <Input
-                      id="query"
-                      placeholder="ej. 'plumbers open 24/7'"
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
+                    <Label>Categoría</Label>
+                    <CategoryMultiSelect
+                      value={selectedCategoryIds}
+                      onChange={setSelectedCategoryIds}
                     />
                   </div>
 
-                  <RadiusSlider
-                    valueMeters={milesToMeters(radiusMiles)}
-                    onChange={(m) => setRadiusMiles(metersToMiles(m))}
-                  />
+                  <div className="space-y-2">
+                    <Label htmlFor="query">Búsqueda personalizada (opcional)</Label>
+                    <Input
+                      id="query"
+                      placeholder="ej. 'abierto 24/7' o 'acepta efectivo'"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                    />
+                    <p className="text-[11px] text-slate-500">
+                      Se agrega a cada categoría seleccionada. Ej: HVAC + "abierto 24/7".
+                    </p>
+                  </div>
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs">

@@ -91,3 +91,56 @@
   border-radius: 50%;
   transform: translate(-50%, -50%);
 }
+
+/* Locate-me control (bottom-right button) */
+.oportunia-locate-container {
+  margin-bottom: 12px !important;
+  margin-right: 2px !important;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.oportunia-locate-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  background: #1e293b;
+  color: #f1f5f9;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+.oportunia-locate-btn:hover:not(:disabled) {
+  background: #334155;
+  color: #38bdf8;
+}
+.oportunia-locate-btn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.oportunia-locate-btn:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+.oportunia-locate-btn.oportunia-locate-loading {
+  color: #38bdf8;
+  background: #334155;
+}
+.oportunia-locate-btn.oportunia-locate-error {
+  color: #ef4444;
+  background: #7f1d1d;
+  animation: oportunia-locate-flash 0.4s ease-out;
+}
+.oportunia-locate-spin {
+  animation: oportunia-locate-spin 0.8s linear infinite;
+}
+@keyframes oportunia-locate-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes oportunia-locate-flash {
+  0%   { background: #ef4444; color: white; }
+  100% { background: #7f1d1d; color: #fecaca; }
+}

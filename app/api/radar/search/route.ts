@@ -1,12 +1,19 @@
 /**
  * API: /api/radar/search
  * POST - search for businesses matching criteria
- * Body: { query, location?, radiusMiles?, maxResults? }
+ * Body: { query?, categoryIds?, origin?, radiusMiles?, maxResults? }
  *
- * Uses the multi-account Google Places fallback. If you have multiple
- * GCP projects configured in /tools, the smart router picks the one with
- * the most remaining quota for each request, and automatically falls back
- * on 429/5xx errors.
+ * - query: free-text override (e.g. "open 24/7"). Optional when categoryIds
+ *   are provided.
+ * - categoryIds: array of category ids (from the categories table). The
+ *   corresponding `query` for each is fetched and combined with `query` if
+ *   present. Multiple category queries are run in parallel and deduped.
+ * - After a successful search, each used category has its usage_count
+ *   incremented so the "Más usadas" section reflects the user's habits.
+ *
+ * Uses the multi-account Google Places fallback. The smart router picks
+ * the account with the most remaining quota, and auto-falls-back on
+ * 429/5xx errors.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -18,10 +25,16 @@ import {
 } from "@/lib/tools/google-places-full";
 import { upsertBusiness } from "@/lib/db/repositories/businesses";
 import { haversineMiles, milesToMeters } from "@/lib/utils/distance";
+import {
+  getCategoryById,
+  incrementUsageBatch,
+} from "@/lib/db/repositories/categories";
 
 interface SearchRequest {
-  /** e.g. "plumbers in Corona CA" or "HVAC near me" */
-  query: string;
+  /** Optional free-text override appended to each category query */
+  query?: string;
+  /** Optional list of category ids to search for (preferred path) */
+  categoryIds?: string[];
   /** Optional origin (for distance calc) */
   origin?: { lat: number; lng: number };
   /** Default: 5 miles */
@@ -33,9 +46,37 @@ interface SearchRequest {
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as SearchRequest;
-    if (!body.query) {
+
+    // Resolve the list of queries to search for.
+    // - If categoryIds are provided, look up each in the DB.
+    // - The free-text `query` is appended to each.
+    // - If no categories, fall back to `query` alone.
+    const freeText = (body.query || "").trim();
+    const categoryIds = Array.isArray(body.categoryIds) ? body.categoryIds : [];
+
+    if (categoryIds.length === 0 && !freeText) {
       return NextResponse.json(
-        { error: "Missing required field: query" },
+        { error: "Provide at least one categoryId or a non-empty query" },
+        { status: 400 }
+      );
+    }
+
+    // Build the list of search queries
+    const searchQueries: { query: string; categoryId: string | null }[] = [];
+    if (categoryIds.length > 0) {
+      for (const id of categoryIds) {
+        const cat = getCategoryById(id);
+        if (!cat) continue; // silently skip unknown ids
+        const q = freeText ? `${cat.query} ${freeText}` : cat.query;
+        searchQueries.push({ query: q, categoryId: cat.id });
+      }
+    } else {
+      searchQueries.push({ query: freeText, categoryId: null });
+    }
+
+    if (searchQueries.length === 0) {
+      return NextResponse.json(
+        { error: "No valid categories found for the given ids" },
         { status: 400 }
       );
     }
@@ -53,30 +94,78 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    // Step 1: Text Search (with multi-account fallback)
-    const searchResult = await textSearchWithFallback({
-      query: body.query,
-      locationBias,
-      maxResultCount: maxResults,
-      regionCode: "US",
-    });
+    // Step 1: Run text searches in parallel (multi-account fallback per call)
+    // Distribute maxResults roughly across the queries so we don't exceed quota.
+    const perQueryMax = Math.max(5, Math.ceil(maxResults / searchQueries.length));
+    const textResults = await Promise.allSettled(
+      searchQueries.map(({ query }) =>
+        textSearchWithFallback({
+          query,
+          locationBias,
+          maxResultCount: perQueryMax,
+          regionCode: "US",
+        })
+      )
+    );
 
-    if (!searchResult.ok) {
+    // Merge + dedupe by place id
+    const seen = new Set<string>();
+    const merged: PlaceSearchResult[] = [];
+    const accountsUsed = new Set<string>();
+    const allErrors: string[] = [];
+    for (let i = 0; i < textResults.length; i++) {
+      const r = textResults[i];
+      if (r.status === "rejected") {
+        allErrors.push(`Query ${i}: ${String(r.reason)}`);
+        continue;
+      }
+      if (!r.value.ok) {
+        allErrors.push(`Query ${i}: ${r.value.error}`);
+        continue;
+      }
+      if (r.value.usedAccountId) accountsUsed.add(r.value.usedAccountId);
+      for (const place of r.value.data) {
+        if (seen.has(place.id)) continue;
+        seen.add(place.id);
+        merged.push(place);
+      }
+    }
+
+    // If every query failed, surface the error
+    if (merged.length === 0) {
       return NextResponse.json(
         {
-          error: searchResult.error,
-          per_account: searchResult.perAccount,
+          error: allErrors[0] || "All searches failed",
+          per_account: textResults
+            .filter((r) => r.status === "fulfilled" && r.value.ok)
+            .map((r: any) => r.value.perAccount)
+            .flat(),
         },
         { status: 503 }
       );
     }
 
-    const searchResults: PlaceSearchResult[] = searchResult.data;
-    if (searchResults.length === 0) {
+    // Cap at maxResults
+    const capped = merged.slice(0, maxResults);
+
+    // Increment usage_count for each category used (so the "Más usadas"
+    // section reflects the user's habits).
+    const usedCategoryIds = searchQueries
+      .map((q) => q.categoryId)
+      .filter((id): id is string => Boolean(id));
+    if (usedCategoryIds.length > 0) {
+      try {
+        incrementUsageBatch(usedCategoryIds);
+      } catch {
+        // non-fatal
+      }
+    }
+
+    if (capped.length === 0) {
       return NextResponse.json({
         results: [],
         saved: 0,
-        used_account: searchResult.usedAccountId,
+        used_accounts: [...accountsUsed],
         message: "No se encontraron negocios.",
       });
     }
@@ -84,7 +173,7 @@ export async function POST(request: NextRequest) {
     // Step 2: For each result, fetch details in parallel.
     // Each detail call also uses the multi-account fallback independently,
     // so a single rate-limited account doesn't kill the whole batch.
-    const detailsToFetch = searchResults.slice(0, Math.min(10, maxResults));
+    const detailsToFetch = capped.slice(0, Math.min(10, maxResults));
     const detailedResults = await Promise.allSettled(
       detailsToFetch.map(async (sr) => {
         const detailResult = await placeDetailsWithFallback(sr.id, { includeReviews: false });
@@ -99,8 +188,6 @@ export async function POST(request: NextRequest) {
 
     // Step 3: Save to DB
     const savedBusinesses: any[] = [];
-    const accountsUsed = new Set<string>();
-    if (searchResult.usedAccountId) accountsUsed.add(searchResult.usedAccountId);
 
     for (const result of detailedResults) {
       if (result.status !== "fulfilled") continue;
@@ -165,9 +252,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       results: savedBusinesses,
       saved: savedBusinesses.length,
-      total_found: searchResults.length,
-      used_account: searchResult.usedAccountId,
-      used_account_label: searchResult.usedAccountLabel,
+      total_found: capped.length,
+      used_accounts: [...accountsUsed],
     });
   } catch (error: any) {
     console.error("POST /api/radar/search failed:", error);

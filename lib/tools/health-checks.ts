@@ -29,15 +29,22 @@ export async function checkGooglePlaces(
 ): Promise<HealthCheckResult> {
   const start = Date.now();
   try {
-    // Place Details Pro: lookup a well-known place (Google HQ)
+    // Use a text search with a generic query. This doesn't depend on any
+    // specific Place ID (which can be retired by Google), and a 200
+    // response — even with 0 results — confirms the API key + billing +
+    // Places API (New) are all working.
     const res = await checkWithTimeout(() =>
-      fetch("https://places.googleapis.com/v1/places/ChIJj61dQgK6j4AR4GeTYWZsTUw", {
-        method: "GET",
+      fetch("https://places.googleapis.com/v1/places:searchText", {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-Goog-Api-Key": apiKey,
-          "X-Goog-FieldMask": "id,displayName",
+          "X-Goog-FieldMask": "places.id",
         },
+        body: JSON.stringify({
+          textQuery: "test",
+          maxResultCount: 1,
+        }),
       })
     );
     const latencyMs = Date.now() - start;
@@ -53,7 +60,7 @@ export async function checkGooglePlaces(
     return {
       ok: true,
       latencyMs,
-      meta: { place: data.displayName?.text ?? "Unknown" },
+      meta: { places_returned: data.places?.length ?? 0 },
     };
   } catch (e: any) {
     return { ok: false, latencyMs: Date.now() - start, error: e.message };

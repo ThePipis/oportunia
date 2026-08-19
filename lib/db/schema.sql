@@ -276,3 +276,32 @@ CREATE TABLE IF NOT EXISTS schema_version (
   applied_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
   description TEXT
 );
+
+-- ============================================================================
+-- Catálogo de categorías de búsqueda (multi-select tag input en /radar)
+-- ============================================================================
+-- Cada categoría es un término que Google Places entiende. El usuario puede
+-- seleccionar múltiples categorías en una búsqueda. Las categorías usadas se
+-- rankean por usage_count DESC para que las "más usadas" aparezcan primero
+-- en el tag picker. El campo is_quick_pick marca las categorías que siempre
+-- se muestran en la fila de "Acceso rápido" (los 12 chips hardcoded).
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS categories (
+  id TEXT PRIMARY KEY,             -- slug: "restaurant", "hvac"
+  display_name TEXT NOT NULL,      -- nombre legible: "Restaurant"
+  display_name_en TEXT,            -- nombre en inglés (opcional, fallback)
+  icon TEXT,                       -- emoji: "🍽️"
+  query TEXT NOT NULL,             -- término que Google Places entiende: "hvac contractor"
+  aliases TEXT,                    -- JSON array: ["food", "dining"]
+  usage_count INTEGER NOT NULL DEFAULT 0,
+  last_used INTEGER,
+  is_system INTEGER NOT NULL DEFAULT 1,    -- 1 = seeded, 0 = user-added
+  is_quick_pick INTEGER NOT NULL DEFAULT 0, -- 1 = aparece en "Acceso rápido"
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+  updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_categories_usage ON categories(usage_count DESC, last_used DESC);
+CREATE INDEX IF NOT EXISTS idx_categories_quick ON categories(is_quick_pick) WHERE is_quick_pick = 1;
+CREATE INDEX IF NOT EXISTS idx_categories_name ON categories(display_name);

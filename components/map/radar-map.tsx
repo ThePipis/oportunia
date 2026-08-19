@@ -14,7 +14,7 @@
  * with ssr: false in the page that uses it.
  */
 
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo, useCallback } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -28,6 +28,7 @@ import {
 import MarkerClusterGroup from "react-leaflet-cluster";
 import L from "leaflet";
 import type { BusinessMarker } from "@/lib/map/types";
+import MapRadiusControl from "./map-radius-control";
 
 interface RadarMapProps {
   /** Map center (lat/lng) — also the search origin */
@@ -42,6 +43,8 @@ interface RadarMapProps {
   onCenterChange: (lat: number, lng: number) => void;
   /** Fired when the user clicks a business marker */
   onSelectBusiness: (id: string) => void;
+  /** Fired when the user changes the radius from the map's overlay control */
+  onRadiusChange?: (meters: number) => void;
 }
 
 /** Default Leaflet markers don't work with bundlers; use a custom DivIcon */
@@ -90,15 +93,44 @@ function MapController({
 }) {
   const map = useMap();
   const markerRef = useRef<L.Marker | null>(null);
+  // Track whether the next center change came from the user clicking/dragging
+  // the map (no need to fly) vs. from an external source like a search result
+  // selection (we want to fly there). We use a ref to avoid re-renders.
+  const lastInternalCenter = useRef<{ lat: number; lng: number } | null>(null);
 
   // Recenter the map when center prop changes externally
   useEffect(() => {
     if (markerRef.current) {
       markerRef.current.setLatLng([center.lat, center.lng]);
     }
-  }, [center]);
+    // If this center change is NOT from a click/drag the user just made
+    // inside the map, animate the view to the new location.
+    const internal = lastInternalCenter.current;
+    if (
+      internal &&
+      Math.abs(internal.lat - center.lat) < 1e-7 &&
+      Math.abs(internal.lng - center.lng) < 1e-7
+    ) {
+      // User-driven change — don't fly, just update the marker (already done)
+      lastInternalCenter.current = null;
+      return;
+    }
+    // External change (e.g. search result) — fly to the new center.
+    if (!map) return;
+    const currentCenter = map.getCenter();
+    const movedMeters = currentCenter.distanceTo([center.lat, center.lng]);
+    if (movedMeters > 50) {
+      // Use flyTo with the radius-derived zoom so the user sees the search
+      // area at a useful scale. If the radius is very large, use a lower zoom.
+      const targetZoom = radiusToZoom(radiusMeters);
+      map.flyTo([center.lat, center.lng], targetZoom, { duration: 0.8 });
+    } else {
+      // Small move — just pan without zoom change for a snappy feel
+      map.panTo([center.lat, center.lng], { animate: true, duration: 0.3 });
+    }
+  }, [center, map, radiusMeters]);
 
-  // Pan to keep marker visible when radius changes
+  // Pan to keep marker visible when radius changes (independent of center)
   useEffect(() => {
     if (!map) return;
     const currentZoom = map.getZoom();
@@ -108,9 +140,10 @@ function MapController({
     }
   }, [radiusMeters, center, map]);
 
-  // Map click moves the center pin
+  // Map click moves the center pin (no fly — user is already there)
   useMapEvents({
     click(e) {
+      lastInternalCenter.current = { lat: e.latlng.lat, lng: e.latlng.lng };
       onCenterChange(e.latlng.lat, e.latlng.lng);
     },
   });
@@ -125,6 +158,9 @@ function MapController({
         dragend: (e) => {
           const m = e.target;
           const pos = m.getLatLng();
+          // Mark as internal change so the controller's effect doesn't
+          // re-fly the view to the new position (the user just moved it).
+          lastInternalCenter.current = { lat: pos.lat, lng: pos.lng };
           onCenterChange(pos.lat, pos.lng);
         },
       }}
@@ -143,6 +179,146 @@ function radiusToZoom(meters: number): number {
   return 10;
 }
 
+/**
+ * LocateControl — adds a "Mi ubicación" button to the map's bottom-right
+ * corner. Uses the browser's Geolocation API to fly to the user's current
+ * position and updates the search origin via onLocate.
+ *
+ * Button states:
+ *   idle     → crosshair icon
+ *   loading  → spinner + disabled
+ *   error    → red flash + tooltip with reason (auto-clears after 3s)
+ */
+function LocateControl({
+  onLocate,
+}: {
+  onLocate: (lat: number, lng: number) => void;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map) return;
+
+    const ICON_CROSSHAIR = `
+      <svg class="oportunia-locate-icon" viewBox="0 0 24 24" width="18" height="18"
+           fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="3"/>
+        <line x1="12" y1="2" x2="12" y2="6"/>
+        <line x1="12" y1="18" x2="12" y2="22"/>
+        <line x1="2" y1="12" x2="6" y2="12"/>
+        <line x1="18" y1="12" x2="22" y2="12"/>
+      </svg>`;
+    const ICON_SPINNER = `
+      <svg class="oportunia-locate-icon oportunia-locate-spin" viewBox="0 0 24 24" width="18" height="18"
+           fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+      </svg>`;
+    const ICON_ERROR = `
+      <svg class="oportunia-locate-icon" viewBox="0 0 24 24" width="18" height="18"
+           fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>`;
+
+    // Cast: L.control exists as both a factory function and a class in the
+    // @types/leaflet definitions, so TS sometimes picks the class type.
+    const locateCtl = (L.control as unknown as (opts: { position: L.ControlPosition }) => L.Control)({
+      position: "bottomright",
+    });
+
+    locateCtl.onAdd = () => {
+      const container = L.DomUtil.create(
+        "div",
+        "oportunia-locate-container leaflet-bar"
+      );
+      const btn = L.DomUtil.create(
+        "button",
+        "oportunia-locate-btn",
+        container
+      ) as HTMLButtonElement;
+      btn.type = "button";
+      btn.title = "Centrar en mi ubicación";
+      btn.setAttribute("aria-label", "Centrar en mi ubicación");
+      btn.innerHTML = ICON_CROSSHAIR;
+
+      // Stop click from propagating to the map (which would move the
+      // center pin via MapController's onMapClick handler).
+      L.DomEvent.disableClickPropagation(container);
+      L.DomEvent.disableScrollPropagation(container);
+
+      let errorTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const setError = (msg: string) => {
+        btn.innerHTML = ICON_ERROR;
+        btn.classList.add("oportunia-locate-error");
+        btn.title = msg;
+        if (errorTimer) clearTimeout(errorTimer);
+        errorTimer = setTimeout(() => {
+          btn.classList.remove("oportunia-locate-error");
+          btn.innerHTML = ICON_CROSSHAIR;
+          btn.title = "Centrar en mi ubicación";
+        }, 3000);
+      };
+
+      const handleClick = (e: Event) => {
+        L.DomEvent.stopPropagation(e);
+        L.DomEvent.preventDefault(e);
+
+        if (typeof navigator === "undefined" || !navigator.geolocation) {
+          setError("Geolocalización no soportada en este navegador");
+          return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = ICON_SPINNER;
+        btn.classList.add("oportunia-locate-loading");
+        btn.title = "Obteniendo ubicación…";
+
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const { latitude, longitude } = pos.coords;
+            // Fly to user location, then update search origin.
+            // Using flyTo with a slightly tighter zoom for "where I am" UX.
+            map.flyTo([latitude, longitude], 14, { duration: 0.8 });
+            onLocate(latitude, longitude);
+            btn.innerHTML = ICON_CROSSHAIR;
+            btn.classList.remove("oportunia-locate-loading");
+            btn.title = "Centrar en mi ubicación";
+            btn.disabled = false;
+          },
+          (err) => {
+            console.error("[Locate] geolocation error:", err);
+            btn.innerHTML = ICON_CROSSHAIR;
+            btn.classList.remove("oportunia-locate-loading");
+            btn.disabled = false;
+            const messages: Record<number, string> = {
+              1: "Permiso de ubicación denegado",
+              2: "Ubicación no disponible",
+              3: "Tiempo agotado al obtener ubicación",
+            };
+            setError(messages[err.code] ?? (err.message || "Error de geolocalización"));
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+        );
+      };
+
+      btn.addEventListener("click", handleClick);
+      return container;
+    };
+
+    locateCtl.addTo(map);
+    return () => {
+      locateCtl.remove();
+    };
+  }, [map, onLocate]);
+
+  return null;
+}
+
 export default function RadarMap({
   center,
   radiusMeters,
@@ -150,9 +326,22 @@ export default function RadarMap({
   selectedId,
   onCenterChange,
   onSelectBusiness,
+  onRadiusChange,
 }: RadarMapProps) {
   // Initial zoom based on default radius
   const initialZoom = useMemo(() => radiusToZoom(radiusMeters), []);
+
+  // Stop click + scroll events on the radius-control overlay from reaching
+  // the map. Without this, clicking the slider track / thumb or scrolling
+  // over it would bubble up to MapController's `useMapEvents({ click })` and
+  // move the center pin. We use Leaflet's own `L.DomEvent.disable*Propagation`
+  // helpers (same pattern as the LocateControl below) so it works regardless
+  // of whether the events come from the React tree or the Leaflet internals.
+  const handleRadiusControlRef = useCallback((el: HTMLDivElement | null) => {
+    if (!el) return;
+    L.DomEvent.disableClickPropagation(el);
+    L.DomEvent.disableScrollPropagation(el);
+  }, []);
 
   return (
     <MapContainer
@@ -188,6 +377,24 @@ export default function RadarMap({
         radiusMeters={radiusMeters}
         onCenterChange={onCenterChange}
       />
+
+      {/* "Mi ubicación" button (bottom-right) */}
+      <LocateControl onLocate={onCenterChange} />
+
+      {/* Compact radius slider (top-right). The outer ref is wired up to
+          `handleRadiusControlRef` so the slider's clicks don't bubble up
+          to the map's click handler (which would move the center pin). */}
+      {onRadiusChange && (
+        <div
+          ref={handleRadiusControlRef}
+          className="leaflet-top leaflet-right"
+          style={{ pointerEvents: "auto" }}
+        >
+          <div className="leaflet-control" style={{ margin: "10px" }}>
+            <MapRadiusControl valueMeters={radiusMeters} onChange={onRadiusChange} />
+          </div>
+        </div>
+      )}
 
       {/* Business markers — clustered when zoomed out */}
       <MarkerClusterGroup
