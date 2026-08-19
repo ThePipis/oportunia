@@ -58,7 +58,12 @@ export default function AddToCrmButton({
         throw new Error(err.error || `Error ${res.status}`);
       }
       setStatus("added");
-      setMessage("✓ Al pipeline");
+      // Intentionally DO NOT change the visible label here. The visual
+      // feedback is the icon transition (+ → ✓) and the colour change
+      // (outline emerald → filled emerald). Swapping the label to
+      // "✓ Al pipeline" produced a duplicate-icon ("++Pipeline"-style)
+      // look and grew the button enough to push "Generar Propuesta" to
+      // the next row, breaking the action-bar layout on the profile.
       onAdded?.();
     } catch (e: any) {
       setStatus("error");
@@ -81,6 +86,15 @@ export default function AddToCrmButton({
       ? `${businessName ?? "Negocio"} agregado al pipeline`
       : `Agregar ${businessName ?? "negocio"} al pipeline de ventas`;
 
+  // Tooltip text per state. We don't reuse `message` for the success
+  // state any more (see add() above for the why) so we set it explicitly.
+  const titleText =
+    status === "added"
+      ? "✓ Agregado al pipeline"
+      : status === "error"
+        ? `Error: ${message}`
+        : "Agregar al pipeline de ventas";
+
   return (
     <button
       type="button"
@@ -90,13 +104,13 @@ export default function AddToCrmButton({
       }}
       disabled={status === "saving"}
       className={cn(
-        "inline-flex items-center justify-center rounded-md transition-colors",
+        "inline-flex items-center justify-center rounded-md transition-colors whitespace-nowrap",
         compact ? "w-7 h-7 text-[14px]" : "px-2.5 h-7 text-[12px] gap-1.5",
         stateStyles[status],
         "font-medium",
         className
       )}
-      title={status === "added" ? message : "Agregar al pipeline de ventas"}
+      title={titleText}
       aria-label={ariaLabel}
     >
       {status === "saving" ? (
@@ -113,7 +127,10 @@ export default function AddToCrmButton({
       )}
       {!compact && (
         <span>
-          {status === "added" ? message : status === "error" ? message : "Pipeline"}
+          {/* Label stays the same in all non-error states so the
+              button width is stable and there is no duplicate-icon
+              artefact. The icon + colour change is the feedback. */}
+          {status === "error" ? message : "Pipeline"}
         </span>
       )}
     </button>
