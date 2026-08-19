@@ -36,6 +36,61 @@ interface SearchResponse {
   error?: string;
 }
 
+/**
+ * SortableHeader — clickable table column header with sort indicator.
+ * Renders the column label + a small arrow that shows the current sort
+ * direction. Click cycles: asc → desc → none (back to API order).
+ */
+function SortableHeader({
+  column,
+  label,
+  sortBy,
+  sortDir,
+  onSort,
+  className,
+}: {
+  column: "name" | "address" | "phone" | "web" | "rating" | "distance";
+  label: React.ReactNode;
+  sortBy: string | null;
+  sortDir: "asc" | "desc";
+  onSort: (c: any) => void;
+  className?: string;
+}) {
+  const isActive = sortBy === column;
+  const arrow = isActive ? (sortDir === "asc" ? "▲" : "▼") : "↕";
+  return (
+    <th
+      className={`font-semibold py-2.5 px-2 whitespace-nowrap select-none cursor-pointer hover:text-slate-200 transition-colors ${
+        isActive ? "text-sky-300" : ""
+      } ${className ?? ""}`}
+      onClick={() => onSort(column)}
+      role="button"
+      tabIndex={0}
+      aria-sort={
+        isActive ? (sortDir === "asc" ? "ascending" : "descending") : "none"
+      }
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSort(column);
+        }
+      }}
+    >
+      <span className="inline-flex items-center gap-1">
+        <span>{label}</span>
+        <span
+          className={`text-[9px] leading-none ${
+            isActive ? "text-sky-400" : "text-slate-600"
+          }`}
+          aria-hidden="true"
+        >
+          {arrow}
+        </span>
+      </span>
+    </th>
+  );
+}
+
 export default function RadarPage() {
   const { t } = useT();
   const { state, update, clear, hydrated } = useRadarSearchState();
@@ -65,6 +120,38 @@ export default function RadarPage() {
     string | null
   >(null);
   const effectiveSelectedId = hoveredBusinessId ?? selectedBusinessId;
+
+  // ───────── Sort state (transient — does NOT persist) ─────────
+  // The results are displayed in API order by default. Click a column
+  // header to sort by it; click again to flip direction; click a third
+  // time to clear the sort and go back to API order.
+  type SortKey = "name" | "address" | "phone" | "web" | "rating" | "distance";
+  const [sortBy, setSortBy] = React.useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = React.useState<"asc" | "desc">("asc");
+
+  const handleSort = React.useCallback(
+    (column: SortKey) => {
+      if (sortBy === column) {
+        // Already sorted by this column — toggle or clear
+        if (sortDir === "asc") {
+          setSortDir("desc");
+        } else {
+          setSortBy(null);
+          setSortDir("asc");
+        }
+      } else {
+        setSortBy(column);
+        // Sensible default direction per column type
+        if (column === "rating" || column === "distance") {
+          // Higher rating / closer distance is usually what you want
+          setSortDir("desc");
+        } else {
+          setSortDir("asc");
+        }
+      }
+    },
+    [sortBy, sortDir]
+  );
 
   const canSearch = selectedCategoryIds.length > 0 || query.trim().length > 0;
 
@@ -126,6 +213,42 @@ export default function RadarPage() {
         distanceMiles: r.distance_miles,
       }));
   }, [results]);
+
+  // Sort the table view of the results. The map markers are NOT sorted
+  // — the map should always show the same data, only the table reorders.
+  const sortedResults = React.useMemo(() => {
+    if (!sortBy) return results;
+    const dir = sortDir === "asc" ? 1 : -1;
+    const getKey = (r: SearchResult): string | number | null => {
+      switch (sortBy) {
+        case "name":
+          return r.name.toLowerCase();
+        case "address":
+          return (r.address ?? "").toLowerCase();
+        case "phone":
+          // Strip non-digits so phone numbers sort numerically
+          return (r.phone ?? "").replace(/\D/g, "");
+        case "web":
+          return (r.website ?? "").toLowerCase();
+        case "rating":
+          return r.rating ?? -1;
+        case "distance":
+          return r.distance_miles ?? Number.POSITIVE_INFINITY;
+        default:
+          return null;
+      }
+    };
+    return [...results].sort((a, b) => {
+      const ka = getKey(a);
+      const kb = getKey(b);
+      if (ka == null && kb == null) return 0;
+      if (ka == null) return 1; // nulls/missing always sort last
+      if (kb == null) return -1;
+      if (ka < kb) return -1 * dir;
+      if (ka > kb) return 1 * dir;
+      return 0;
+    });
+  }, [results, sortBy, sortDir]);
 
   return (
     <main className="min-h-screen bg-gradient-radial">
@@ -329,7 +452,26 @@ export default function RadarPage() {
                   <span className="font-mono text-slate-500">{totalFound}</span>
                   <span className="text-slate-400"> encontrados</span>
                 </p>
-                <div className="flex items-center gap-3 text-xs">
+                <div className="flex items-center gap-3 text-xs flex-wrap">
+                  {sortBy && (
+                    <button
+                      onClick={() => {
+                        setSortBy(null);
+                        setSortDir("asc");
+                      }}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-sky-500/10 border border-sky-500/30 text-sky-300 hover:bg-sky-500/20 transition-colors"
+                      title="Quitar orden y volver al orden de Google"
+                    >
+                      <span aria-hidden="true">↕</span>
+                      <span>
+                        Orden: {sortBy}
+                        <span className="ml-1 text-sky-400">
+                          {sortDir === "asc" ? "▲" : "▼"}
+                        </span>
+                      </span>
+                      <span className="text-sky-500 ml-0.5">✕</span>
+                    </button>
+                  )}
                   <span className="text-slate-500 hidden sm:inline">
                     Pasá el mouse por una fila para resaltar el pin en el mapa
                   </span>
@@ -350,38 +492,68 @@ export default function RadarPage() {
                   <thead>
                     <tr className="bg-slate-900/60 text-[11px] uppercase tracking-wide text-slate-400 border-b border-white/5">
                       {/* Negocio: always visible, takes flexible width */}
-                      <th className="text-left font-semibold py-2.5 pl-3 pr-2">
-                        Negocio
-                      </th>
+                      <SortableHeader
+                        column="name"
+                        label="Negocio"
+                        sortBy={sortBy}
+                        sortDir={sortDir}
+                        onSort={handleSort}
+                        className="text-left pl-3 pr-2"
+                      />
                       {/* Dirección: sm+ (640px+) */}
-                      <th className="text-left font-semibold py-2.5 px-2 hidden sm:table-cell w-[1%] whitespace-nowrap">
-                        Dir
-                      </th>
+                      <SortableHeader
+                        column="address"
+                        label="Dir"
+                        sortBy={sortBy}
+                        sortDir={sortDir}
+                        onSort={handleSort}
+                        className="text-left hidden sm:table-cell"
+                      />
                       {/* Teléfono: always visible, narrow */}
-                      <th className="text-left font-semibold py-2.5 px-2 w-[1%] whitespace-nowrap">
-                        Tel
-                      </th>
+                      <SortableHeader
+                        column="phone"
+                        label="Tel"
+                        sortBy={sortBy}
+                        sortDir={sortDir}
+                        onSort={handleSort}
+                        className="text-left"
+                      />
                       {/* Web: md+ (768px+) */}
-                      <th className="text-left font-semibold py-2.5 px-2 hidden md:table-cell w-[1%] whitespace-nowrap">
-                        Web
-                      </th>
+                      <SortableHeader
+                        column="web"
+                        label="Web"
+                        sortBy={sortBy}
+                        sortDir={sortDir}
+                        onSort={handleSort}
+                        className="text-left hidden md:table-cell"
+                      />
                       {/* Rating: lg+ (1024px+) */}
-                      <th className="text-center font-semibold py-2.5 px-2 hidden lg:table-cell w-[1%] whitespace-nowrap">
-                        ⭐
-                      </th>
+                      <SortableHeader
+                        column="rating"
+                        label="⭐"
+                        sortBy={sortBy}
+                        sortDir={sortDir}
+                        onSort={handleSort}
+                        className="text-center hidden lg:table-cell"
+                      />
                       {/* Distancia: lg+ (1024px+) */}
-                      <th className="text-right font-semibold py-2.5 px-2 hidden lg:table-cell w-[1%] whitespace-nowrap">
-                        Dist
-                      </th>
-                      {/* Perfil: always visible */}
-                      <th className="text-right font-semibold py-2.5 pl-2 pr-3 w-[1%] whitespace-nowrap">
+                      <SortableHeader
+                        column="distance"
+                        label="Dist"
+                        sortBy={sortBy}
+                        sortDir={sortDir}
+                        onSort={handleSort}
+                        className="text-right hidden lg:table-cell"
+                      />
+                      {/* Perfil: always visible (not sortable — it's the CTA) */}
+                      <th className="text-right font-semibold py-2.5 pl-2 pr-3 whitespace-nowrap">
                         <span className="sm:hidden">Más</span>
                         <span className="hidden sm:inline">Perfil</span>
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {results.map((r) => {
+                    {sortedResults.map((r) => {
                       const isSelected = r.id === effectiveSelectedId;
                       const mapsHref = r.lat != null && r.lng != null
                         ? `https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lng}`
