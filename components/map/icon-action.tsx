@@ -76,25 +76,12 @@ export default function IconAction({
   const hasValue = Boolean(value && value.trim().length > 0);
   const canFallback = !hasValue && Boolean(fallbackQuery && fallbackQuery.trim().length > 0);
 
-  const handleClick = React.useCallback(
+  const handleCopyClick = React.useCallback(
     async (e: React.MouseEvent | React.TouchEvent) => {
       e.stopPropagation();
       e.preventDefault();
       if (disabled) return;
-
-      // Empty value + fallback query: open Google search
-      if (canFallback && fallbackQuery) {
-        const url = `https://www.google.com/search?q=${encodeURIComponent(fallbackQuery)}`;
-        window.open(url, "_blank", "noopener,noreferrer");
-        return;
-      }
-
       if (!hasValue) return;
-
-      if (href) {
-        window.open(href, "_blank", "noopener,noreferrer");
-        return;
-      }
       try {
         if (navigator.clipboard?.writeText) {
           await navigator.clipboard.writeText(value);
@@ -115,7 +102,20 @@ export default function IconAction({
         /* clipboard blocked — no-op */
       }
     },
-    [value, href, disabled, canFallback, fallbackQuery, hasValue]
+    [value, disabled, hasValue]
+  );
+
+  // Handler used by the fallback "?" button: stops the parent row's
+  // onClick (which would otherwise navigate to the business profile)
+  // and lets the native <a target="_blank"> behaviour open the Google
+  // search in a new tab. Using a real <a> is important: window.open
+  // can be blocked by aggressive pop-up blockers and would also break
+  // middle-click / ctrl-click / right-click semantics.
+  const handleAnchorClick = React.useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+    },
+    []
   );
 
   // ───────── Render branches ─────────
@@ -133,11 +133,18 @@ export default function IconAction({
 
   // Empty value + fallback: dashed "?" icon that opens a Google search.
   // We don't make up data — we give the user a way to look it up themselves.
-  if (!hasValue && canFallback) {
+  // Render as <a target="_blank"> so middle-click / ctrl-click / right-click
+  // → "open in new tab" all work natively and the pop-up blocker doesn't
+  // interfere (which it would for a window.open() call).
+  if (!hasValue && canFallback && fallbackQuery) {
+    const fallbackHref = `https://www.google.com/search?q=${encodeURIComponent(fallbackQuery)}`;
     return (
-      <button
-        type="button"
-        onClick={handleClick}
+      <a
+        href={fallbackHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={handleAnchorClick}
+        onAuxClick={handleAnchorClick}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         onFocus={() => setHovered(true)}
@@ -168,7 +175,7 @@ export default function IconAction({
             🔍 Buscar en Google
           </span>
         )}
-      </button>
+      </a>
     );
   }
 
@@ -199,17 +206,58 @@ export default function IconAction({
       ? "bottom-full left-1/2 -translate-x-1/2 mb-1.5"
       : "top-full left-1/2 -translate-x-1/2 mt-1.5";
 
-  const button = (
+  // When `href` is provided we render a real <a target="_blank"> instead of
+  // a <button> + window.open. This way the browser's native "open in new
+  // tab" behaviour works (including middle-click, ctrl-click, right-click
+  // → "open in new tab") and aggressive pop-up blockers don't kill the
+  // new tab the way they would a programmatic window.open() call.
+  if (href) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={handleAnchorClick}
+        onAuxClick={handleAnchorClick}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onFocus={() => setHovered(true)}
+        onBlur={() => setHovered(false)}
+        className={cn(
+          "relative inline-flex items-center justify-center w-7 h-7 rounded-md",
+          "bg-slate-800/60 hover:bg-slate-700/80",
+          "text-slate-300 hover:text-white",
+          "border border-white/5 hover:border-white/15",
+          "transition-colors",
+          "text-[14px] leading-none",
+          className
+        )}
+        aria-label={`${theLabel}: ${value} (abre en nueva pestaña)`}
+        title={value.length > 38 ? `${theLabel}: ${value.slice(0, 38)}…` : `${theLabel}: ${value}`}
+      >
+        <span aria-hidden="true">{theIcon}</span>
+        {hovered && (
+          <span
+            role="tooltip"
+            className={cn(
+              "absolute z-50 px-2 py-1 rounded text-[11px] whitespace-nowrap pointer-events-none",
+              "shadow-lg border tooltip-enter",
+              "bg-slate-900 text-slate-100 border-white/15",
+              tooltipPos
+            )}
+          >
+            {tooltipText}
+          </span>
+        )}
+      </a>
+    );
+  }
+
+  // No href: button that copies the value to the clipboard.
+  return (
     <button
       type="button"
-      onClick={handleClick}
-      onAuxClick={(e) => {
-        // Middle-click: open href in new tab if href is provided
-        if (href && e.button === 1) {
-          e.stopPropagation();
-          window.open(href, "_blank", "noopener,noreferrer");
-        }
-      }}
+      onClick={handleCopyClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => {
         setHovered(false);
@@ -246,6 +294,4 @@ export default function IconAction({
       )}
     </button>
   );
-
-  return button;
 }
