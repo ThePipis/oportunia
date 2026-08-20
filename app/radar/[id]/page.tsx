@@ -16,12 +16,23 @@ interface Business {
   city: string | null;
   state: string | null;
   zip: string | null;
+  country: string | null;
   phone: string | null;
   website: string | null;
+  email: string | null;
   google_rating: number | null;
   review_count: number | null;
+  /** JSON string with hours: { openNow, weekdayDescriptions[], ... } */
+  hours_json: string | null;
   primary_type: string | null;
+  business_types: string | null;
+  source_engine: string | null;
+  last_crawled: number | null;
+  sector_id: string | null;
+  sector_confidence: number | null;
   distance_miles: number | null;
+  /** Raw Google Places payload — has editorialSummary, businessStatus, priceLevel, etc. */
+  raw_data_json: string | null;
 }
 
 interface PipelineStatus {
@@ -40,6 +51,7 @@ interface ScoreData {
   tier: "hot" | "warm" | "nurture" | "skip";
   reasoning_text: string | null;
   breakdown_json: string | null;
+  last_calculated?: number;
 }
 
 interface MatchedService {
@@ -89,6 +101,7 @@ export default function BusinessProfilePage({
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [rescoring, setRescoring] = React.useState(false);
+  const [justUpdated, setJustUpdated] = React.useState(false);
   const [generatingTp, setGeneratingTp] = React.useState(false);
   const [tpError, setTpError] = React.useState<string | null>(null);
 
@@ -123,6 +136,7 @@ export default function BusinessProfilePage({
   // Re-score
   const handleRescore = async () => {
     setRescoring(true);
+    setJustUpdated(false);
     try {
       const res = await fetch(`/api/businesses/${unwrappedParams.id}/rescore`, {
         method: "POST",
@@ -138,6 +152,8 @@ export default function BusinessProfilePage({
         setScore(data.score);
         setMatchedServices(data.matchedServices ?? []);
         setPipeline(data.pipeline ?? { in_pipeline: false, stage: null });
+        setJustUpdated(true);
+        setTimeout(() => setJustUpdated(false), 3000);
       }
     } catch (e: any) {
       setError(e.message);
@@ -204,6 +220,79 @@ export default function BusinessProfilePage({
     ? { total: score.total_score, tier: score.tier }
     : null;
 
+  // Parse raw_data_json once to extract a few convenience fields
+  // (hours, businessStatus, priceLevel, editorialSummary). We never
+  // pass raw_data_json to the child — the child works with clean,
+  // typed values. If the parse fails or the field is missing, the
+  // child renders "No disponible" for that field.
+  type RawExtras = {
+    openNow?: boolean | null;
+    weekdayDescriptions?: string[];
+    businessStatus?: string | null;
+    priceLevel?: string | null;
+    editorialSummary?: string | null;
+  };
+  let rawExtras: RawExtras = {};
+  if (business?.raw_data_json) {
+    try {
+      const raw = JSON.parse(business.raw_data_json);
+      // Google Places stores hours in BOTH regularOpeningHours and
+      // currentOpeningHours. Prefer regular (the canonical schedule)
+      // and fall back to current.
+      const hours =
+        raw.regularOpeningHours ?? raw.currentOpeningHours ?? null;
+      rawExtras = {
+        openNow: hours?.openNow ?? null,
+        weekdayDescriptions: Array.isArray(hours?.weekdayDescriptions)
+          ? hours.weekdayDescriptions
+          : [],
+        businessStatus: raw.businessStatus ?? null,
+        priceLevel: raw.priceLevel ?? null,
+        editorialSummary:
+          raw.editorialSummary?.text ??
+          (typeof raw.editorialSummary === "string" ? raw.editorialSummary : null),
+      };
+    } catch {
+      // Malformed JSON — leave defaults; child shows "No disponible".
+    }
+  }
+
+  // hours_json is also stored as a top-level column; prefer that
+  // for backwards-compat with businesses that didn't have raw_data
+  // populated. Fall back to raw_extras.
+  let hoursForHeader: {
+    openNow: boolean | null;
+    weekdayDescriptions: string[];
+  } | null = null;
+  if (business?.hours_json) {
+    try {
+      const h = JSON.parse(business.hours_json);
+      hoursForHeader = {
+        openNow: typeof h.openNow === "boolean" ? h.openNow : null,
+        weekdayDescriptions: Array.isArray(h.weekdayDescriptions)
+          ? h.weekdayDescriptions
+          : [],
+      };
+    } catch {
+      /* fall through */
+    }
+  }
+  if (
+    !hoursForHeader ||
+    (hoursForHeader.weekdayDescriptions.length === 0 &&
+      rawExtras.weekdayDescriptions &&
+      rawExtras.weekdayDescriptions.length > 0)
+  ) {
+    hoursForHeader = {
+      openNow:
+        hoursForHeader?.openNow ?? rawExtras.openNow ?? null,
+      weekdayDescriptions:
+        hoursForHeader?.weekdayDescriptions.length
+          ? hoursForHeader.weekdayDescriptions
+          : rawExtras.weekdayDescriptions ?? [],
+    };
+  }
+
   const breakdownData = score
     ? {
         breakdown: {
@@ -244,7 +333,31 @@ export default function BusinessProfilePage({
         </div>
 
         {/* Business header card */}
-        <BusinessHeader business={business} score={scoreForHeader} />
+        <BusinessHeader
+          business={{
+            id: business.id,
+            name: business.name,
+            address: business.address,
+            city: business.city,
+            state: business.state,
+            zip: business.zip,
+            phone: business.phone,
+            website: business.website,
+            email: business.email,
+            google_rating: business.google_rating,
+            review_count: business.review_count,
+            hours: hoursForHeader,
+            primary_type: business.primary_type,
+            distance_miles: business.distance_miles,
+            priceLevel: rawExtras.priceLevel ?? null,
+            businessStatus: rawExtras.businessStatus ?? null,
+            editorialSummary: rawExtras.editorialSummary ?? null,
+            sourceEngine: business.source_engine,
+            lastCrawledAt: business.last_crawled,
+          }}
+          score={scoreForHeader}
+          reviewBreakdownJson={null}
+        />
 
         {/* Tier badge + actions */}
         {score && (
@@ -257,17 +370,27 @@ export default function BusinessProfilePage({
                   {TIER_LABEL[score.tier]}
                 </span>
                 <span className="text-sm text-slate-400">
-                  Score calculado · {new Date(score.business_id ? Date.now() : Date.now()).toLocaleDateString()}
+                  Score calculado · {score.last_calculated ? new Date(score.last_calculated * 1000).toLocaleString() : new Date().toLocaleDateString()}
                 </span>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <Button
-                  variant="secondary"
+                  variant={justUpdated ? "default" : "secondary"}
                   size="sm"
                   onClick={handleRescore}
                   disabled={rescoring}
+                  className={justUpdated ? "bg-emerald-600 hover:bg-emerald-500 text-white" : ""}
                 >
-                  {rescoring ? "Recalculando..." : "🔄 Recalcular score"}
+                  {rescoring ? (
+                    <>
+                      <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin mr-1.5" />
+                      Recalculando...
+                    </>
+                  ) : justUpdated ? (
+                    "✓ Score Actualizado"
+                  ) : (
+                    "🔄 Recalcular score"
+                  )}
                 </Button>
                 <AddToListButton
                   businessId={business.id}
