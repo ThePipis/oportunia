@@ -19,9 +19,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   textSearchWithFallback,
-  placeDetailsWithFallback,
   type PlaceSearchResult,
-  type PlaceDetails,
 } from "@/lib/tools/google-places-full";
 import { upsertBusiness } from "@/lib/db/repositories/businesses";
 import { haversineMiles, milesToMeters } from "@/lib/utils/distance";
@@ -250,36 +248,18 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Step 2: For each result, fetch details in parallel.
-    // Each detail call also uses the multi-account fallback independently,
-    // so a single rate-limited account doesn't kill the whole batch.
-    const detailsToFetch = maxResults ? capped.slice(0, maxResults) : capped;
-    const detailedResults = await Promise.allSettled(
-      detailsToFetch.map(async (sr) => {
-        const detailResult = await placeDetailsWithFallback(sr.id, { includeReviews: false });
-        if (!detailResult.ok) {
-          return { searchResult: sr, details: null as PlaceDetails | null, error: detailResult.error };
-        }
-        return { searchResult: sr, details: detailResult.data, error: null as string | null };
-      })
-    );
-
-    // Step 3: Save to DB & Prepare for Deep Sincere Scoring
+    // Step 2: Directly process search results from single textSearch (0 N+1 calls, 0 Enterprise details fees)
     const upsertedBusinesses: any[] = [];
 
-    for (const result of detailedResults) {
-      if (result.status !== "fulfilled") continue;
-      const { searchResult: sr, details } = result.value;
-      if (!details) continue;
-
+    for (const place of capped) {
       // Compute distance if we have coordinates and origin
       let distanceMiles: number | undefined;
-      if (body.origin && details.location) {
+      if (body.origin && place.location) {
         distanceMiles = haversineMiles(
           body.origin.lat,
           body.origin.lng,
-          details.location.latitude,
-          details.location.longitude
+          place.location.latitude,
+          place.location.longitude
         );
 
         // Strict radial filter: exclude any business located outside the requested circle radius
@@ -289,31 +269,31 @@ export async function POST(request: NextRequest) {
       }
 
       // Parse address into city/state/zip
-      const addressParts = parseAddress(details.formattedAddress ?? "");
+      const addressParts = parseAddress(place.formattedAddress ?? "");
 
       const business = upsertBusiness({
-        google_place_id: details.id,
-        name: details.displayName?.text ?? sr.name,
-        address: details.formattedAddress ?? sr.formattedAddress ?? undefined,
+        google_place_id: place.id,
+        name: place.displayName?.text ?? place.name ?? "Negocio Local",
+        address: place.formattedAddress ?? undefined,
         city: addressParts.city,
         state: addressParts.state,
         zip: addressParts.zip,
-        lat: details.location?.latitude,
-        lng: details.location?.longitude,
-        phone: details.nationalPhoneNumber ?? details.internationalPhoneNumber,
-        website: details.websiteUri,
-        google_rating: details.rating ?? sr.rating,
-        review_count: details.userRatingCount ?? sr.userRatingCount,
-        hours_json: details.regularOpeningHours
-          ? JSON.stringify(details.regularOpeningHours)
+        lat: place.location?.latitude,
+        lng: place.location?.longitude,
+        phone: place.nationalPhoneNumber ?? place.internationalPhoneNumber,
+        website: place.websiteUri,
+        google_rating: place.rating,
+        review_count: place.userRatingCount,
+        hours_json: place.regularOpeningHours
+          ? JSON.stringify(place.regularOpeningHours)
           : undefined,
-        business_types: details.types?.join(","),
-        primary_type: details.primaryType ?? details.primaryTypeDisplayName?.text,
-        photos_json: details.photos ? JSON.stringify(details.photos) : undefined,
+        business_types: place.types?.join(","),
+        primary_type: place.primaryType ?? place.primaryTypeDisplayName?.text,
+        source_url: place.googleMapsUri,
         source_engine: "google_places",
         distance_miles: distanceMiles,
         last_crawled: Math.floor(Date.now() / 1000),
-        raw_data_json: JSON.stringify(details),
+        raw_data_json: JSON.stringify(place),
       });
 
       upsertedBusinesses.push(business);

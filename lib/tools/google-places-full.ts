@@ -21,15 +21,27 @@ const TOOL_NAME = "google-places";
 
 export interface PlaceSearchResult {
   id: string;
-  name: string;
+  name?: string;
+  displayName?: { text: string; languageCode?: string };
   formattedAddress?: string;
+  shortFormattedAddress?: string;
   location?: { latitude: number; longitude: number };
   types?: string[];
   primaryType?: string;
+  primaryTypeDisplayName?: { text: string };
   rating?: number;
   userRatingCount?: number;
   priceLevel?: string;
   businessStatus?: string;
+  websiteUri?: string;
+  nationalPhoneNumber?: string;
+  internationalPhoneNumber?: string;
+  regularOpeningHours?: {
+    openNow?: boolean;
+    weekdayDescriptions?: string[];
+    periods?: any[];
+  };
+  googleMapsUri?: string;
 }
 
 export interface PlaceDetails {
@@ -147,13 +159,14 @@ export async function textSearch(
     iterations++;
     const reqBody: Record<string, unknown> = pageToken ? { ...baseBody, pageToken } : baseBody;
 
+    // Single unified Search FieldMask bringing Essentials + Pro in ONE call
     const res: Response = await fetch(`${API_BASE}/places:searchText`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": apiKey,
         "X-Goog-FieldMask":
-          "places.id,places.displayName,places.formattedAddress,places.location,places.types,places.primaryType,places.rating,places.userRatingCount,places.businessStatus,nextPageToken",
+          "places.id,places.displayName,places.formattedAddress,places.shortFormattedAddress,places.location,places.types,places.primaryType,places.primaryTypeDisplayName,places.businessStatus,places.websiteUri,places.nationalPhoneNumber,places.regularOpeningHours,places.rating,places.userRatingCount,places.googleMapsUri,nextPageToken",
       },
       body: JSON.stringify(reqBody),
     });
@@ -177,9 +190,10 @@ export async function textSearch(
 export async function placeDetails(
   apiKey: string,
   placeId: string,
-  options: { includeReviews?: boolean } = {}
+  options: { includeReviews?: boolean; includePhotos?: boolean; includeAtmosphere?: boolean } = {}
 ): Promise<PlaceDetails | null> {
-  const fieldMask = [
+  // Essentials + Pro fields by default (no Enterprise Atmosphere charges unless explicitly requested)
+  const fields = [
     "id",
     "displayName",
     "formattedAddress",
@@ -190,18 +204,18 @@ export async function placeDetails(
     "primaryTypeDisplayName",
     "rating",
     "userRatingCount",
-    "priceLevel",
     "businessStatus",
     "websiteUri",
     "nationalPhoneNumber",
-    "internationalPhoneNumber",
     "regularOpeningHours",
-    "currentOpeningHours",
-    "editorialSummary",
-    "photos",
     "googleMapsUri",
-    ...(options.includeReviews ? ["reviews"] : []),
-  ].join(",");
+  ];
+
+  if (options.includeReviews) fields.push("reviews");
+  if (options.includePhotos) fields.push("photos");
+  if (options.includeAtmosphere) fields.push("priceLevel,editorialSummary,currentOpeningHours");
+
+  const fieldMask = fields.join(",");
 
   const res = await fetch(`${API_BASE}/places/${placeId}`, {
     method: "GET",

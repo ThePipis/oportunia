@@ -111,5 +111,11 @@
     - [x] **Texto Verbatim 1:1 y Enlace a Perfil Reddit**: El fragmento citado y título ahora coinciden 100% palabra por palabra con el post de Reddit en vivo, con botón directo `💬 DM en Reddit` y enlace al perfil del usuario.
     - [x] Al pulsar **"🚀 Capturar en CRM"**, la empresa se guarda en SQLite con todos sus datos geográficos, teléfono, web y coordenadas para prospección.
 
+  - [x] Publicación del Repositorio en **GitHub**:
+    - [x] Auditoría de seguridad: 0 API keys o secretos expuestos en el código fuente.
+    - [x] Reglas `.gitignore` actualizadas para excluir archivos `.md`, `.ps1` y `.patch` de la raíz del proyecto.
+    - [x] Creado el repositorio público **`ThePipis/oportunia`** en GitHub.
+    - [x] Código completo subido a la rama `main` de GitHub: [https://github.com/ThePipis/oportunia](https://github.com/ThePipis/oportunia).
+
 ## Próximos Pasos Disponibles
 - [ ] Incorporación de nuevas funciones de prospección o integraciones de LLMs adicionales según demanda.
