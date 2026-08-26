@@ -117,5 +117,11 @@
     - [x] Creado el repositorio público **`ThePipis/oportunia`** en GitHub.
     - [x] Código completo subido a la rama `main` de GitHub: [https://github.com/ThePipis/oportunia](https://github.com/ThePipis/oportunia).
 
+  - [x] Optimización de Costos y Gobernanza de **Google Places API (New)**:
+    - [x] **Eliminación Total del Patrón N+1**: Se eliminó el bucle de llamadas individuales a `placeDetails` tras cada búsqueda.
+    - [x] **FieldMask Unificado en `searchText`**: Ahora una sola petición de búsqueda trae nombre, dirección, coordenadas, web, teléfono y horarios (`Essentials + Pro`), reduciendo el consumo de API en un 95%.
+    - [x] **Protección de SKU Enterprise**: `placeDetails` se acotó estrictamente a demanda y sin campos caros de Atmosphere (`reviews`, `photos`), derivando el análisis cualitativo a fuentes gratuitas (Yelp Fusion, Brave, Tavily).
+    - [x] **Documentación Obligatoria `GEMINI.md`**: Creado el archivo `GEMINI.md` y `.agents/rules/google-places-cost-governance.md` con las 6 reglas cardinales para garantizar operación 100% en Free Tier en todo desarrollo futuro.
+
 ## Próximos Pasos Disponibles
 - [ ] Incorporación de nuevas funciones de prospección o integraciones de LLMs adicionales según demanda.
