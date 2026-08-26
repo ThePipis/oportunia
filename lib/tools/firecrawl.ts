@@ -9,7 +9,7 @@
 
 import { withToolFallback, type FallbackResult } from "./fallback";
 
-const API_BASE = "https://api.firecrawl.dev/v1";
+const API_BASE = "https://api.firecrawl.dev/v2";
 const TOOL_NAME = "firecrawl";
 
 export interface ScrapeOptions {

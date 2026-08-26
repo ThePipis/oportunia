@@ -42,6 +42,9 @@ async function main() {
   if (addColumnIfMissing("tool_configs", "supports_multiple_keys", "INTEGER NOT NULL DEFAULT 0")) {
     console.log("   ↪ tool_configs.supports_multiple_keys añadida");
   }
+  if (addColumnIfMissing("business_scores", "talking_points_json", "TEXT")) {
+    console.log("   ↪ business_scores.talking_points_json añadida");
+  }
 
   // Marcar tools multi-key para instalaciones existentes
   const multiKeyTools = [

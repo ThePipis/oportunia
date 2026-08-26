@@ -18,6 +18,7 @@ export interface BusinessScore {
   breakdown_json: string | null;
   tier: "hot" | "warm" | "nurture" | "skip";
   reasoning_text: string | null;
+  talking_points_json?: string | null;
   last_calculated: number;
 }
 
@@ -28,6 +29,38 @@ export function getScore(businessId: string): BusinessScore | null {
       .prepare(`SELECT * FROM business_scores WHERE business_id = ?`)
       .get(businessId) as BusinessScore | undefined
   ) ?? null;
+}
+
+export function saveTalkingPoints(businessId: string, talkingPoints: any[]): void {
+  const db = getDb();
+  const exists = db.prepare(`SELECT business_id FROM business_scores WHERE business_id = ?`).get(businessId);
+  const jsonStr = JSON.stringify(talkingPoints);
+
+  if (exists) {
+    db.prepare(`UPDATE business_scores SET talking_points_json = ? WHERE business_id = ?`).run(
+      jsonStr,
+      businessId
+    );
+  } else {
+    db.prepare(`
+      INSERT INTO business_scores (business_id, total_score, talking_points_json, last_calculated)
+      VALUES (?, 0, ?, strftime('%s', 'now'))
+    `).run(businessId, jsonStr);
+  }
+}
+
+export function getTalkingPoints(businessId: string): any[] | null {
+  const db = getDb();
+  const row = db
+    .prepare(`SELECT talking_points_json FROM business_scores WHERE business_id = ?`)
+    .get(businessId) as { talking_points_json: string | null } | undefined;
+  if (!row?.talking_points_json) return null;
+  try {
+    const parsed = JSON.parse(row.talking_points_json);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 export function saveScore(businessId: string, score: ScoreBreakdown): BusinessScore {

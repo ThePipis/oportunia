@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useT } from "@/lib/i18n/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import AddToCrmButton from "@/components/map/add-to-crm-button";
@@ -27,6 +28,7 @@ export default function ListDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const { t } = useT();
   const unwrapped = React.use(params);
   const [data, setData] = React.useState<ListData | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -86,30 +88,36 @@ export default function ListDetailPage({
     URL.revokeObjectURL(url);
   };
 
-  if (loading) return <div className="p-8 text-slate-400">Cargando...</div>;
-  if (!data) return <div className="p-8 text-red-300">Lista no encontrada</div>;
+  if (loading) return <div className="p-8 text-slate-400">{t("common.loading", "Cargando...")}</div>;
+  if (!data) return <div className="p-8 text-red-300">{t("lists.notFound", "Lista no encontrada")}</div>;
 
   return (
-    <main className="min-h-screen bg-gradient-radial">
-      <div className="max-w-5xl mx-auto p-6 md:p-8 space-y-6">
-        <div className="flex items-start justify-between flex-wrap gap-4">
-          <div>
-            <h1 className="text-3xl font-bold font-display text-gradient-brand">{data.list.name}</h1>
-            {data.list.description && <p className="text-sm text-slate-400 mt-1">{data.list.description}</p>}
-            <p className="text-xs text-slate-500 mt-2">{data.items.length} items</p>
-          </div>
-          <div className="flex items-center gap-2"><Button onClick={exportCSV} variant="secondary" size="sm">📥 Exportar CSV</Button>
-          </div>
+    <div className="p-4 md:p-8 space-y-6 max-w-5xl mx-auto">
+      <div className="flex items-start justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold font-display text-slate-900 dark:text-slate-100">
+            {data.list.name}
+          </h1>
+          {data.list.description && (
+            <p className="text-xs md:text-sm text-slate-600 dark:text-slate-400 mt-1 font-medium">
+              {data.list.description}
+            </p>
+          )}
+          <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-2 font-bold">
+            {t("lists.prospectsInList", { count: data.items.length }, `${data.items.length} prospectos en esta lista`)}
+          </p>
         </div>
-
-        <div className="text-sm">
-          <a href="/lists" className="text-sky-400">← Listas</a>
+        <div className="flex items-center gap-2">
+          <Button onClick={exportCSV} variant="outline" size="sm" className="font-semibold">
+            📥 {t("radar.exportCsv", "Exportar CSV")}
+          </Button>
         </div>
+      </div>
 
         {data.items.length === 0 ? (
           <Card>
-            <CardContent className="py-12 text-center text-slate-400">
-              Lista vacía. Agregá negocios desde <a href="/radar" className="text-sky-400">/radar</a>.
+            <CardContent className="py-12 text-center text-slate-500">
+              {t("lists.emptyList", "Lista vacía. Agregá negocios desde el Radar.")}
             </CardContent>
           </Card>
         ) : (
@@ -118,18 +126,18 @@ export default function ListDetailPage({
               <Card key={it.business_id} className="card-glass-hover">
                 <CardContent className="py-3 px-4 flex items-center justify-between gap-3 flex-wrap">
                   <div className="flex-1 min-w-0">
-                    <a href={`/radar/${it.business_id}`} className="block">
-                      <p className="text-sm font-semibold text-slate-100 hover:text-sky-300">
+                    <a href={`/radar/${it.business_id}`} className="block group">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 group-hover:text-sky-600 dark:group-hover:text-sky-300 transition-colors">
                         {it.business_name}
                       </p>
-                      <p className="text-xs text-slate-500 truncate">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
                         {it.city ?? "?"} {it.address ? `· ${it.address}` : ""}
                       </p>
                     </a>
                   </div>
                   {it.total_score !== null && (
                     <div className="text-right">
-                      <span className="text-lg font-bold text-sky-300">{it.total_score}</span>
+                      <span className="text-lg font-bold text-sky-700 dark:text-sky-300 font-mono">{it.total_score}</span>
                       <span className="text-[10px] text-slate-500 ml-1">/100</span>
                     </div>
                   )}
@@ -141,13 +149,13 @@ export default function ListDetailPage({
                     <button
                       onClick={() => removeItem(it.business_id, it.business_name)}
                       disabled={removingId === it.business_id}
-                      className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-red-500/10 hover:bg-red-500/25 border border-red-500/30 hover:border-red-500/60 text-red-300 hover:text-red-100 transition-colors disabled:opacity-50 text-[14px]"
-                      title="Quitar de la lista"
-                      aria-label={`Quitar ${it.business_name} de la lista`}
+                      className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 hover:text-rose-900 dark:bg-red-500/10 dark:hover:bg-red-500/25 dark:border-red-500/30 dark:text-red-300 dark:hover:text-red-100 transition-colors disabled:opacity-50 text-[14px]"
+                      title={t("lists.removeFromList", "Quitar de la lista")}
+                      aria-label={`${t("lists.removeFromList", "Quitar de la lista")} ${it.business_name}`}
                     >
                       {removingId === it.business_id ? (
                         <span
-                          className="inline-block w-3 h-3 border-2 border-red-300 border-t-transparent rounded-full animate-spin"
+                          className="inline-block w-3 h-3 border-2 border-rose-600 dark:border-red-300 border-t-transparent rounded-full animate-spin"
                           aria-hidden="true"
                         />
                       ) : (
@@ -161,6 +169,5 @@ export default function ListDetailPage({
           </div>
         )}
       </div>
-    </main>
   );
 }

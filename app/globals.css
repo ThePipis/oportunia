@@ -3,56 +3,59 @@
 @tailwind utilities;
 
 /* ============================================================================
- * OportunIA - Global Styles
- * Tailwind v3 + brand palette + design system primitives
+ * OportunIA - Global Styles & Design System Tokens (Theme-Architect)
  * ============================================================================ */
 
 @layer base {
   :root {
-    /* Light theme (default for shadcn-style) */
-    --background: 0 0% 100%;
-    --foreground: 222.2 47.4% 11.2%;
-    --primary: 199 89% 48%;
+    /* Light Theme Tokens */
+    --background: 210 40% 98%;          /* #F8FAFC - Soft crisp canvas */
+    --foreground: 222.2 47.4% 11.2%;     /* #0F172A - Deep slate readable text */
+    --card: 0 0% 100%;                  /* #FFFFFF - Pure white card surface */
+    --card-foreground: 222.2 47.4% 11.2%;/* #0F172A */
+    --popover: 0 0% 100%;               /* #FFFFFF - Elevated modal/menu */
+    --popover-foreground: 222.2 47.4% 11.2%;
+    --primary: 199 89% 48%;             /* #0EA5E9 - Sky 500 */
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 96.1%;
+    --secondary: 210 40% 96.1%;         /* #F1F5F9 - Slate 100 */
     --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 24 95% 53%;
+    --muted: 210 40% 96.1%;             /* #F1F5F9 */
+    --muted-foreground: 215.4 16.3% 46.9%; /* #64748B - Slate 500 */
+    --accent: 24 95% 53%;               /* #F97316 - Orange 500 */
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 84.2% 60.2%;       /* #EF4444 - Red 500 */
     --destructive-foreground: 0 0% 100%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
+    --border: 214.3 31.8% 91.4%;        /* #E2E8F0 - Slate 200 */
+    --input: 214.3 31.8% 91.4%;         /* #E2E8F0 */
     --ring: 199 89% 48%;
-    --radius: 0.5rem;
+    --radius: 0.625rem;
   }
 
   .dark {
-    /* Dark theme (OportunIA default) */
-    --background: 222 47% 6%;
-    --foreground: 0 0% 100%;
-    --primary: 199 89% 48%;
+    /* Dark Theme Tokens */
+    --background: 222 47% 6%;           /* #080D1A - Deep navy/slate canvas */
+    --foreground: 210 40% 98%;          /* #F8FAFC - Crisp light text */
+    --card: 222 47% 10%;                /* #0E1524 - Layer 1 card surface */
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 12%;             /* #121B2F - Layer 2 elevation */
+    --popover-foreground: 210 40% 98%;
+    --primary: 199 89% 48%;             /* #0EA5E9 - Sky 500 */
     --primary-foreground: 222 47% 6%;
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 0 0% 100%;
+    --secondary: 217 33% 17%;           /* #1E293B */
+    --secondary-foreground: 210 40% 98%;
     --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 24 95% 53%;
+    --muted-foreground: 215 20% 65%;    /* #94A3B8 - Slate 400 */
+    --accent: 24 95% 53%;               /* #F97316 */
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 72% 51%;
+    --destructive: 0 72% 51%;           /* #DC2626 */
     --destructive-foreground: 0 0% 100%;
-    --border: 217 33% 17%;
+    --border: 217 33% 17%;              /* #1E293B */
     --input: 217 33% 17%;
     --ring: 199 89% 48%;
   }
 
   * {
-    @apply border-white/10;
-  }
-
-  .light * {
-    @apply border-slate-200;
+    border-color: hsl(var(--border));
   }
 
   html {
@@ -61,10 +64,10 @@
   }
 
   body {
-    @apply bg-[hsl(var(--background))] text-[hsl(var(--foreground))];
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
     font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     min-height: 100vh;
-    /* Smooth transition when toggling theme */
     transition: background-color 0.2s ease, color 0.2s ease;
   }
 
@@ -74,321 +77,207 @@
   }
 }
 
-/* =====================================================================
- * THEME OVERRIDES
- * Invert Tailwind's slate color scale + override common patterns
- * so light mode actually looks light. Works without touching 80+ files.
- * ===================================================================== */
-.light {
-  /* Invert slate scale: dark→light, light→dark */
-  --tw-color-slate-50: 15 23 42;   /* was white-ish, now dark */
-  --tw-color-slate-100: 30 41 59;
-  --tw-color-slate-200: 51 65 85;
-  --tw-color-slate-300: 71 85 105;
-  --tw-color-slate-400: 100 116 139;
-  --tw-color-slate-500: 148 163 184;
-  --tw-color-slate-600: 203 213 225;
-  --tw-color-slate-700: 226 232 240;
-  --tw-color-slate-800: 241 245 249;
-  --tw-color-slate-900: 248 250 252;
-  --tw-color-slate-950: 255 255 255;
+/* ============================================================================
+ * THEME SPECIFIC STYLES & RADIAL GRADIENTS
+ * ============================================================================ */
 
-  /* White becomes dark text in light mode */
-  --tw-color-white: 15 23 42;
-}
-
-.light body {
-  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+/* Light mode background gradient */
+html.light body {
+  background: linear-gradient(180deg, #f8fafc 0%, #edf2f7 100%);
   color: #0f172a;
 }
 
-/* Override the radial gradient background for landing/light pages */
-.light .bg-gradient-radial {
-  background: linear-gradient(180deg, #eff6ff 0%, #ffffff 70%) !important;
+html.light .bg-gradient-radial {
+  background: radial-gradient(circle at 15% 10%, #e0f2fe 0%, #f8fafc 70%) !important;
 }
 
-/* Make all text that's hardcoded as white in dark mode readable in light */
-.light .text-white {
-  color: #0f172a !important;
-}
-.light .text-slate-100 {
-  color: #0f172a !important;
-}
-.light .text-slate-200 {
-  color: #1e293b !important;
-}
-.light .text-slate-300 {
-  color: #334155 !important;
-}
-.light .text-slate-400 {
-  color: #475569 !important;
-}
-.light .text-slate-500 {
-  color: #64748b !important;
+/* Dark mode background gradient */
+html.dark body {
+  background-color: #060919;
+  color: #f8fafc;
 }
 
-/* Sky (used for active links + accents) — needs darker tone on light bg */
-.light .text-sky-200,
-.light .text-sky-300 {
-  color: #0369a1 !important;
-}
-.light .text-sky-400 {
-  color: #0284c7 !important;
-}
-.light .text-emerald-200,
-.light .text-emerald-300 {
-  color: #047857 !important;
-}
-.light .text-amber-200,
-.light .text-amber-300 {
-  color: #b45309 !important;
-}
-.light .text-violet-200,
-.light .text-violet-300 {
-  color: #6d28d9 !important;
+html.dark .bg-gradient-radial {
+  background: radial-gradient(circle at 15% 10%, #121A42 0%, #060919 65%) !important;
 }
 
-/* Active nav link backgrounds — keep accent visible on light bg */
-.light .bg-sky-500\/20 {
-  background-color: rgba(14, 165, 233, 0.15) !important;
-}
-.light .bg-sky-500\/15 {
-  background-color: rgba(14, 165, 233, 0.12) !important;
-}
-.light .bg-emerald-500\/15 {
-  background-color: rgba(16, 185, 129, 0.12) !important;
-}
-.light .bg-amber-500\/15 {
-  background-color: rgba(245, 158, 11, 0.12) !important;
-}
-.light .bg-violet-500\/15 {
-  background-color: rgba(139, 92, 246, 0.12) !important;
-}
-.light .border-sky-500\/40 {
-  border-color: rgba(14, 165, 233, 0.4) !important;
-}
-.light .border-sky-500\/30 {
-  border-color: rgba(14, 165, 233, 0.3) !important;
-}
-.light .border-amber-500\/30 {
-  border-color: rgba(245, 158, 11, 0.4) !important;
-}
-.light .border-emerald-500\/30 {
-  border-color: rgba(16, 185, 129, 0.3) !important;
-}
-.light .border-red-500\/30 {
-  border-color: rgba(239, 68, 68, 0.4) !important;
-}
-
-/* Background overrides for hardcoded dark classes */
-.light .bg-slate-950\/80 {
-  background-color: rgba(255, 255, 255, 0.9) !important;
-  border-bottom: 1px solid #e2e8f0 !important;
-}
-.light .bg-slate-950 {
-  background-color: #ffffff !important;
-}
-.light .bg-slate-900\/60 {
-  background-color: rgba(255, 255, 255, 0.95) !important;
-  border-color: #e2e8f0 !important;
-}
-.light .bg-slate-900 {
-  background-color: #ffffff !important;
-  color: #0f172a !important;
-  border-color: #e2e8f0 !important;
-  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25) !important;
-}
-.light .bg-slate-900\/40 {
-  background-color: rgba(248, 250, 252, 0.9) !important;
-}
-.light .bg-slate-900\/50 {
-  background-color: rgba(248, 250, 252, 0.95) !important;
-  border-color: #e2e8f0 !important;
-}
-.light .bg-slate-900\/30 {
-  background-color: rgba(241, 245, 249, 0.9) !important;
-}
-.light .bg-slate-800\/50 {
-  background-color: rgba(241, 245, 249, 0.95) !important;
-  color: #1e293b !important;
-}
-.light .bg-slate-800 {
-  background-color: #f1f5f9 !important;
-  color: #1e293b !important;
-}
-
-/* Borders */
-.light .border-white\/5,
-.light .border-white\/10 {
-  border-color: rgba(15, 23, 42, 0.1) !important;
-}
-.light .border-white\/20 {
-  border-color: rgba(15, 23, 42, 0.15) !important;
-}
-
-/* Inputs */
-.light input,
-.light textarea,
-.light select {
-  background-color: #ffffff !important;
-  color: #0f172a !important;
-  border-color: #cbd5e1 !important;
-}
-
-/* Tables */
-.light table th {
-  color: #0369a1 !important;
-}
-.light table td {
-  color: #0f172a !important;
-  border-color: rgba(15, 23, 42, 0.06) !important;
-}
-.light table tr:hover td {
-  background: rgba(15, 23, 42, 0.02) !important;
-}
-
-/* Buttons (override variant styles) */
-.light button.btn-table {
-  background: rgba(14, 165, 233, 0.1) !important;
-  color: #0369a1 !important;
-  border-color: rgba(14, 165, 233, 0.3) !important;
-}
-.light button.btn-table:hover {
-  background: #0ea5e9 !important;
-  color: #ffffff !important;
-}
-
-/* Toast */
-.light .toast {
-  background: linear-gradient(135deg, #10b981 0%, #0ea5e9 100%) !important;
-  color: #ffffff !important;
-}
-
-/* Card-glass style */
-.light .card-glass {
-  background: rgba(255, 255, 255, 0.85) !important;
-  border-color: rgba(15, 23, 42, 0.08) !important;
-  backdrop-filter: blur(16px);
-}
-
-/* Gradient text in light */
-.light .text-gradient-brand {
-  background: linear-gradient(90deg, #0f172a 0%, #475569 100%) !important;
-  -webkit-background-clip: text !important;
-  -webkit-text-fill-color: transparent !important;
-  background-clip: text !important;
-}
-
-/* Brand gradient stays the same but ensure contrast */
-.light .from-orange-500,
-.light .to-orange-700 {
-  /* same colors, they look good on light too */
-}
-
-/* Skeleton */
-.light .animate-pulse {
-  opacity: 0.6;
-}
-
-/* Tooltip enter animation (used by IconAction in the radar results table) */
-@keyframes tooltip-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 4px) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, 0) scale(1);
-  }
-}
-.tooltip-enter {
-  animation: tooltip-in 120ms ease-out;
-  transform-origin: bottom center;
-}
-
+/* ============================================================================
+ * COMPONENT PRIMITIVES & CARDS
+ * ============================================================================ */
 
 @layer components {
-  /* Card glass-morphism style */
+  /* Dynamic Glass Card */
   .card-glass {
-    @apply bg-surface-card backdrop-blur-md border border-white/10 rounded-xl;
+    @apply bg-white/90 dark:bg-slate-900/70 backdrop-blur-md 
+           border border-slate-200/80 dark:border-white/10 
+           shadow-sm dark:shadow-none rounded-xl;
   }
 
   .card-glass-hover {
-    @apply transition-all duration-200 hover:border-sky-400/40 hover:-translate-y-0.5;
+    @apply transition-all duration-200 
+           hover:border-sky-500/50 dark:hover:border-sky-400/40 
+           hover:shadow-md dark:hover:shadow-none hover:-translate-y-0.5;
   }
 
   /* Brand gradient text */
   .text-gradient-brand {
-    @apply bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-300 
+           bg-clip-text text-transparent;
   }
 
-  /* Button base (shadcn-style) */
+  /* Buttons */
   .btn-primary {
     @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md
-           bg-gradient-to-br from-orange-500 to-orange-700 text-white font-semibold
-           shadow-lg shadow-orange-500/30 transition-all duration-200
-           hover:-translate-y-0.5 hover:shadow-xl hover:shadow-orange-500/50
-           focus:outline-none focus:ring-2 focus:ring-orange-400;
+           bg-gradient-to-br from-orange-500 to-orange-600 text-white font-semibold
+           shadow-md shadow-orange-500/20 transition-all duration-200
+           hover:-translate-y-0.5 hover:shadow-lg hover:shadow-orange-500/30
+           focus:outline-none focus:ring-2 focus:ring-orange-400 active:scale-[0.98];
   }
 
   .btn-secondary {
     @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md
-           bg-sky-500/15 text-sky-300 border border-sky-400/30 font-semibold
+           bg-sky-50 text-sky-700 border border-sky-200 font-semibold
+           dark:bg-sky-500/15 dark:text-sky-300 dark:border-sky-400/30
            transition-all duration-200
-           hover:bg-sky-500 hover:text-slate-950
-           focus:outline-none focus:ring-2 focus:ring-sky-400;
+           hover:bg-sky-100 hover:text-sky-800 dark:hover:bg-sky-500 dark:hover:text-slate-950
+           focus:outline-none focus:ring-2 focus:ring-sky-400 active:scale-[0.98];
   }
 
   .btn-ghost {
     @apply inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md
-           text-slate-300 font-medium transition-colors duration-200
-           hover:bg-white/5 hover:text-white
+           text-slate-600 dark:text-slate-300 font-medium transition-colors duration-200
+           hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white
            focus:outline-none focus:ring-2 focus:ring-sky-400;
   }
 
-  /* Score tier badges */
+  /* Score Tier Badges (Dynamic Light & Dark contrast) */
   .badge-gold {
     @apply inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider
-           bg-yellow-500/15 text-yellow-400 border border-yellow-500/30;
+           bg-amber-50 text-amber-800 border border-amber-200
+           dark:bg-yellow-500/15 dark:text-yellow-400 dark:border-yellow-500/30;
   }
 
   .badge-cyan {
     @apply inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider
-           bg-sky-500/15 text-sky-300 border border-sky-400/30;
+           bg-sky-50 text-sky-700 border border-sky-200
+           dark:bg-sky-500/15 dark:text-sky-300 dark:border-sky-400/30;
   }
 
   .badge-green {
     @apply inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider
-           bg-emerald-500/15 text-emerald-300 border border-emerald-500/30;
+           bg-emerald-50 text-emerald-800 border border-emerald-200
+           dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30;
   }
 
   .badge-red {
     @apply inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider
-           bg-red-500/15 text-red-300 border border-red-500/30;
+           bg-rose-50 text-rose-800 border border-rose-200
+           dark:bg-red-500/15 dark:text-red-300 dark:border-red-500/30;
   }
 }
 
+/* ============================================================================
+ * UTILITIES & MICRO-INTERACTIONS
+ * ============================================================================ */
+
 @layer utilities {
-  /* Subtle background pattern */
+  /* Tooltip enter animation */
+  @keyframes tooltip-in {
+    from {
+      opacity: 0;
+      transform: translate(-50%, 4px) scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, 0) scale(1);
+    }
+  }
+
+  .tooltip-enter {
+    animation: tooltip-in 120ms ease-out;
+    transform-origin: bottom center;
+  }
+
+  /* Subtle background grid */
   .bg-grid {
     background-image:
-      linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+      linear-gradient(rgba(15, 23, 42, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(15, 23, 42, 0.04) 1px, transparent 1px);
     background-size: 32px 32px;
   }
 
-  /* Smooth scrollbar in dark mode */
-  .dark ::-webkit-scrollbar {
+  .dark .bg-grid {
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
+  ::-webkit-scrollbar-track {
+    background: #f1f5f9;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+
   .dark ::-webkit-scrollbar-track {
-    @apply bg-slate-900;
+    background: #0b1120;
   }
   .dark ::-webkit-scrollbar-thumb {
-    @apply bg-slate-700 rounded;
+    background: #334155;
   }
   .dark ::-webkit-scrollbar-thumb:hover {
-    @apply bg-slate-600;
+    background: #475569;
+  }
+
+  /* Text Selection */
+  ::selection {
+    background-color: rgba(14, 165, 233, 0.25);
+    color: inherit;
+  }
+
+  /* Browser autofill fix */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover, 
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: currentColor;
+    -webkit-box-shadow: 0 0 0px 1000px hsl(var(--card)) inset;
+    transition: background-color 5000s ease-in-out 0s;
+  }
+
+  /* Hide scrollbar utility */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Custom High-Contrast Hand Cursors for Kanban Drag & Drop */
+  .kanban-grab {
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='%230f172a' stroke='%23ffffff' stroke-width='1.5'%3E%3Cpath d='M18 11V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2v4'/%3E%3Cpath d='M14 10V4a2 2 0 0 0-2-2 2 2 0 0 0-2 2v8'/%3E%3Cpath d='M10 10.5V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2v8'/%3E%3Cpath d='M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15'/%3E%3C/svg%3E") 10 10, grab !important;
+  }
+
+  .kanban-grab:active,
+  .kanban-grabbing {
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='%230f172a' stroke='%23ffffff' stroke-width='1.5'%3E%3Cpath d='M18 11.5V9a2 2 0 0 0-2-2 2 2 0 0 0-2 2v2.5'/%3E%3Cpath d='M14 10V8a2 2 0 0 0-2-2 2 2 0 0 0-2 2v2'/%3E%3Cpath d='M10 9.5V8a2 2 0 0 0-2-2 2 2 0 0 0-2 2v3'/%3E%3Cpath d='M18 11a2 2 0 1 1 4 0v4a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 13'/%3E%3C/svg%3E") 10 10, grabbing !important;
+  }
+
+  .dark .kanban-grab {
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='%23f8fafc' stroke='%23090d16' stroke-width='1.5'%3E%3Cpath d='M18 11V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2v4'/%3E%3Cpath d='M14 10V4a2 2 0 0 0-2-2 2 2 0 0 0-2 2v8'/%3E%3Cpath d='M10 10.5V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2v8'/%3E%3Cpath d='M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15'/%3E%3C/svg%3E") 10 10, grab !important;
+  }
+
+  .dark .kanban-grab:active,
+  .dark .kanban-grabbing {
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='%23f8fafc' stroke='%23090d16' stroke-width='1.5'%3E%3Cpath d='M18 11.5V9a2 2 0 0 0-2-2 2 2 0 0 0-2 2v2.5'/%3E%3Cpath d='M14 10V8a2 2 0 0 0-2-2 2 2 0 0 0-2 2v2'/%3E%3Cpath d='M10 9.5V8a2 2 0 0 0-2-2 2 2 0 0 0-2 2v3'/%3E%3Cpath d='M18 11a2 2 0 1 1 4 0v4a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 13'/%3E%3C/svg%3E") 10 10, grabbing !important;
   }
 }

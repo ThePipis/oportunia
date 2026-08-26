@@ -58,4 +58,11 @@ temp/
 # Local dev server scripts (workaround for 30-min background task limit)
 dev-loop.cmd
 dev-loop.ps1
+prod-loop.cmd
+prod-loop.ps1
 "Instalar acceso directo desktop.ps1"
+
+# Root specific files (.md, .ps1, .patch in project root)
+/*.md
+/*.ps1
+/*.patch

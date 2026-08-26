@@ -65,13 +65,24 @@ const TOOL_TEMPLATES = [
     name: "brave-search",
     display_name: "Brave Search",
     description:
-      "Búsqueda web alternativa con privacidad. 2,000 queries/mes gratis POR SUBSCRIPCIÓN. Multi-sub con auto-fallback.",
+      "Búsqueda web alternativa con privacidad. 1,000 queries/mes gratis por suscripción. Multi-sub con auto-fallback.",
     icon: "🦁",
     docs_url: "https://brave.com/search/api/",
     sort_order: 50,
-    quota_limit: 2000,
+    quota_limit: 1000,
     quota_period: "month" as const,
     supports_multiple_keys: 1 as any,
+  },
+  {
+    type: "llm_endpoint" as const,
+    name: "llama-local",
+    display_name: "Llama.cpp Local Server (GPU)",
+    description:
+      "Servidor local de inferencia en GPU (llama.cpp / llama-server en srvubuntu01). Inferencia ultra-rápida, privada y a $0 costo. Auto-detecta dinámicamente el modelo cargado en VRAM.",
+    icon: "🖥️",
+    docs_url: "http://100.119.37.120:11434",
+    sort_order: 55,
+    supports_multiple_keys: 0 as any,
   },
   {
     type: "llm_endpoint" as const,
@@ -83,6 +94,17 @@ const TOOL_TEMPLATES = [
     docs_url: "https://aistudio.google.com/apikey",
     sort_order: 60,
     supports_multiple_keys: 1 as any,
+  },
+  {
+    type: "mcp_server" as const,
+    name: "agent-reach",
+    display_name: "Agent-Reach (Social Intelligence & Web Eyes)",
+    description:
+      "Motor de inteligencia social y web scraping sin APIs de pago. Lee Twitter/X, Reddit, transcripciones de YouTube, Instagram, Facebook y artículos web para auditar la huella digital del prospecto y encontrar leads.",
+    icon: "🌐",
+    docs_url: "https://github.com/Panniantong/agent-reach",
+    sort_order: 70,
+    supports_multiple_keys: 0 as any,
   },
 ];
 

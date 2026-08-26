@@ -23,18 +23,10 @@
  */
 
 import * as React from "react";
+import { useT } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 
 type Status = "idle" | "saving" | "in_pipeline" | "error";
-
-const STAGE_LABELS: Record<string, string> = {
-  lead: "Nuevo lead",
-  contacted: "Contactado",
-  meeting: "Reunión agendada",
-  proposal: "Propuesta enviada",
-  closed_won: "Cerrado ganado",
-  closed_lost: "Cerrado perdido",
-};
 
 interface AddToCrmButtonProps {
   businessId: string;
@@ -66,6 +58,16 @@ export default function AddToCrmButton({
   className,
   onPipelineChange,
 }: AddToCrmButtonProps) {
+  const { t } = useT();
+
+  const STAGE_LABELS: Record<string, string> = {
+    lead: t("crm.stages.lead", "Nuevo lead"),
+    contacted: t("crm.stages.contacted", "Contactado"),
+    meeting: t("crm.stages.meeting", "Reunión agendada"),
+    proposal: t("crm.stages.proposal", "Propuesta enviada"),
+    closed_won: t("crm.stages.closed_won", "Cerrado ganado"),
+    closed_lost: t("crm.stages.closed_lost", "Cerrado perdido"),
+  };
   // Start in "in_pipeline" if the caller told us so; otherwise "idle".
   // We track stage in local state too so the post-action transitions
   // (e.g. after a remove) keep the UI consistent until the parent
@@ -98,11 +100,14 @@ export default function AddToCrmButton({
   }, [status, inPipelineProp]);
 
   // === Add action ===================================================
-  // Moves the business into the lead stage of the pipeline. Used
-  // when the button is in "idle" state.
+  // Moves the business into the lead stage of the pipeline with instant (0ms) optimistic feedback.
   const add = async () => {
-    if (status === "saving") return;
-    setStatus("saving");
+    // 1. Optimistic UI (0ms instant response)
+    setStatus("in_pipeline");
+    setCurrentStage(stage);
+    onPipelineChange?.(true, stage);
+
+    // 2. Sync in background
     try {
       const res = await fetch("/api/crm/move", {
         method: "POST",
@@ -113,31 +118,20 @@ export default function AddToCrmButton({
       if (!res.ok) {
         throw new Error(data.error || `Error ${res.status}`);
       }
-      // /api/crm/move returns { added:false, duplicate:true } when
-      // the business is already in the requested stage. We still
-      // surface that as "in_pipeline" so the UI is correct, but
-      // treat it as a no-op (no rescore needed).
-      if (data.added === false || data.duplicate === true) {
-        setStatus("in_pipeline");
-        setCurrentStage(stage);
-        onPipelineChange?.(true, stage);
-        return;
-      }
-      setStatus("in_pipeline");
-      setCurrentStage(stage);
-      onPipelineChange?.(true, stage);
     } catch (e: any) {
+      // Revert on error
       setStatus("error");
       setErrorMsg(e?.message || "Error");
+      setCurrentStage(null);
+      onPipelineChange?.(false, null);
     }
   };
 
   // === Remove action ================================================
-  // Pops a native confirm() with the current stage so the user
-  // knows WHERE the business is before they pull it. On confirm we
-  // hit /api/crm/remove and snap back to "idle".
+  // Pops a native confirm() with the current stage. On confirm, snaps
+  // back to "idle" immediately (0ms optimistic) and syncs in background.
   const remove = async () => {
-    if (status === "saving") return;
+    const prevStage = currentStage;
     const stageLabel = currentStage
       ? STAGE_LABELS[currentStage] ?? currentStage
       : "el pipeline";
@@ -147,7 +141,13 @@ export default function AddToCrmButton({
         `Esta acción marca el negocio como removido. Lo podés volver a agregar desde el radar con el botón +Pipeline.`
     );
     if (!ok) return;
-    setStatus("saving");
+
+    // 1. Optimistic UI (0ms instant response)
+    setStatus("idle");
+    setCurrentStage(null);
+    onPipelineChange?.(false, null);
+
+    // 2. Sync in background
     try {
       const res = await fetch("/api/crm/remove", {
         method: "POST",
@@ -158,12 +158,12 @@ export default function AddToCrmButton({
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || `Error ${res.status}`);
       }
-      setStatus("idle");
-      setCurrentStage(null);
-      onPipelineChange?.(false, null);
     } catch (e: any) {
+      // Revert on error
       setStatus("error");
       setErrorMsg(e?.message || "Error");
+      setCurrentStage(prevStage);
+      onPipelineChange?.(true, prevStage);
     }
   };
 
@@ -181,35 +181,26 @@ export default function AddToCrmButton({
 
   // === Visual state =================================================
   const stateStyles: Record<Status, string> = {
-    idle: "bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/30 hover:border-emerald-500/60 text-emerald-300 hover:text-emerald-100",
-    saving: "bg-slate-700/50 border border-white/10 text-slate-400 cursor-wait",
+    idle: "bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 hover:text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/40 dark:hover:bg-emerald-500/25 dark:hover:text-emerald-100 shadow-2xs",
+    saving: "bg-slate-100 border border-slate-200 text-slate-500 dark:bg-slate-700/50 dark:border-white/10 dark:text-slate-400 cursor-wait",
     in_pipeline:
-      "bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 hover:border-amber-500/60 text-amber-300 hover:text-amber-100",
-    error: "bg-red-500/15 border border-red-500/40 text-red-300",
+      "bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/40 dark:hover:bg-amber-500/20 shadow-2xs",
+    error: "bg-rose-50 text-rose-700 border border-rose-200 dark:bg-red-500/15 dark:border-red-500/40 dark:text-red-300",
   };
 
   const ariaLabel =
     status === "in_pipeline"
-      ? `${businessName ?? "Negocio"} en el pipeline (${STAGE_LABELS[currentStage ?? ""] ?? currentStage ?? "?"}) — click para quitar`
+      ? `${businessName ?? "Negocio"} (${STAGE_LABELS[currentStage ?? ""] ?? currentStage ?? "?"})`
       : status === "error"
         ? `Error: ${errorMsg}`
-        : `Agregar ${businessName ?? "negocio"} al pipeline de ventas`;
+        : `${t("radar.addToCrm", "+ Pipeline")}: ${businessName ?? "negocio"}`;
 
   const titleText =
     status === "in_pipeline"
-      ? `Click para quitar del pipeline (actualmente en ${STAGE_LABELS[currentStage ?? ""] ?? currentStage ?? "?"})`
+      ? `(${STAGE_LABELS[currentStage ?? ""] ?? currentStage ?? "?"})`
       : status === "error"
         ? `Error: ${errorMsg}`
-        : "Agregar al pipeline de ventas";
-
-  // The compact mode (radar table, list detail) renders only an icon.
-  // The non-compact mode (profile page) shows icon + label.
-  const labelText =
-    status === "in_pipeline"
-      ? "En pipeline"
-      : status === "error"
-        ? errorMsg
-        : "Pipeline";
+        : t("radar.addToCrm", "+ Pipeline");
 
   return (
     <button
@@ -217,30 +208,40 @@ export default function AddToCrmButton({
       onClick={handleClick}
       disabled={status === "saving"}
       className={cn(
-        "inline-flex items-center justify-center rounded-md transition-colors whitespace-nowrap",
-        compact ? "w-7 h-7 text-[14px]" : "px-2.5 h-7 text-[12px] gap-1.5",
+        "inline-flex items-center justify-center rounded-md border transition-all whitespace-nowrap select-none",
+        compact ? "px-2 h-7 text-[11px] gap-1 font-bold" : "px-3 h-8 text-xs gap-1.5 font-semibold",
         stateStyles[status],
-        "font-medium",
         className
       )}
       title={titleText}
       aria-label={ariaLabel}
     >
       {status === "saving" ? (
-        <span
-          className="inline-block w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"
-          aria-hidden="true"
-        />
+        <>
+          <span
+            className="inline-block w-3 h-3 border-2 border-slate-500 border-t-transparent rounded-full animate-spin"
+            aria-hidden="true"
+          />
+          <span className="text-[10px]">{t("common.saving", "Guardando...")}</span>
+        </>
       ) : status === "in_pipeline" ? (
-        <span aria-hidden="true" className="text-[14px] leading-none font-bold">
-          −
-        </span>
+        <>
+          <span aria-hidden="true" className="text-xs font-bold text-amber-600 dark:text-amber-400">
+            ✓
+          </span>
+          <span>{t("radar.inCrm", "En Pipeline")}</span>
+        </>
       ) : status === "error" ? (
-        <span aria-hidden="true">⚠</span>
+        <>
+          <span aria-hidden="true">⚠️</span>
+          <span>{errorMsg || t("common.error", "Error")}</span>
+        </>
       ) : (
-        <span aria-hidden="true">+</span>
+        <>
+          <span aria-hidden="true" className="text-xs">💼</span>
+          <span>{t("radar.addToCrm", "+ Pipeline")}</span>
+        </>
       )}
-      {!compact && <span>{labelText}</span>}
     </button>
   );
 }

@@ -60,13 +60,7 @@ export async function DELETE(
   try {
     const { id, businessId } = await params;
     const removed = removeFromList(id, businessId);
-    if (!removed) {
-      return NextResponse.json(
-        { error: "El negocio no estaba en esta lista" },
-        { status: 404 }
-      );
-    }
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, removed }, { status: 200 });
   } catch (error: any) {
     console.error("DELETE /api/lists/[id]/items/[businessId] failed:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });

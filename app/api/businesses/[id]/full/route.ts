@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getBusiness } from "@/lib/db/repositories/businesses";
-import { getScore } from "@/lib/db/repositories/scores";
+import { getScore, getTalkingPoints } from "@/lib/db/repositories/scores";
 import { getMatchedServices } from "@/lib/scoring/service-matcher";
 import { listActivities } from "@/lib/db/repositories/activities";
 
@@ -28,6 +28,7 @@ export async function GET(
     }
     const score = getScore(id);
     const matchedServices = getMatchedServices(id);
+    const talkingPoints = getTalkingPoints(id);
 
     // Pipeline status = the latest activity's stage, if it's a real
     // status_change. A latest pipeline_removed means "not in
@@ -42,6 +43,7 @@ export async function GET(
       business,
       score,
       matchedServices,
+      talkingPoints: talkingPoints ?? [],
       pipeline: { in_pipeline, stage },
     });
   } catch (error: any) {

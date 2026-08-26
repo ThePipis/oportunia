@@ -151,8 +151,8 @@ export default function IconAction({
         onBlur={() => setHovered(false)}
         className={cn(
           "relative inline-flex items-center justify-center w-7 h-7 rounded-md",
-          "bg-transparent border border-dashed border-slate-600 hover:border-sky-500/70",
-          "text-slate-500 hover:text-sky-300",
+          "bg-slate-50 dark:bg-transparent border border-dashed border-slate-300 dark:border-slate-600 hover:border-sky-500",
+          "text-slate-500 hover:text-sky-600 dark:hover:text-sky-300",
           "transition-colors",
           "text-[12px] leading-none",
           className
@@ -166,7 +166,7 @@ export default function IconAction({
             role="tooltip"
             className={cn(
               "absolute z-50 px-2 py-1 rounded text-[11px] whitespace-nowrap pointer-events-none",
-              "shadow-lg border bg-slate-900 text-slate-100 border-white/15 tooltip-enter",
+              "shadow-lg border bg-slate-900 text-slate-100 border-slate-800 dark:border-white/15 tooltip-enter",
               placement === "top"
                 ? "bottom-full left-1/2 -translate-x-1/2 mb-1.5"
                 : "top-full left-1/2 -translate-x-1/2 mt-1.5"
@@ -183,7 +183,7 @@ export default function IconAction({
   if (!hasValue) {
     return (
       <span
-        className="inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-700 text-[14px]"
+        className="inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-400 dark:text-slate-700 text-[14px]"
         title="No disponible"
         aria-label="No disponible"
       >
@@ -225,10 +225,10 @@ export default function IconAction({
         onBlur={() => setHovered(false)}
         className={cn(
           "relative inline-flex items-center justify-center w-7 h-7 rounded-md",
-          "bg-slate-800/60 hover:bg-slate-700/80",
-          "text-slate-300 hover:text-white",
-          "border border-white/5 hover:border-white/15",
-          "transition-colors",
+          "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/60 dark:hover:bg-slate-700/80",
+          "text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white",
+          "border border-slate-200/80 dark:border-white/5 hover:border-slate-300 dark:hover:border-white/15",
+          "transition-colors hover:z-50 focus:z-50",
           "text-[14px] leading-none",
           className
         )}
@@ -240,9 +240,9 @@ export default function IconAction({
           <span
             role="tooltip"
             className={cn(
-              "absolute z-50 px-2 py-1 rounded text-[11px] whitespace-nowrap pointer-events-none",
-              "shadow-lg border tooltip-enter",
-              "bg-slate-900 text-slate-100 border-white/15",
+              "absolute z-[100] px-2.5 py-1 rounded-md text-[11px] font-medium whitespace-nowrap pointer-events-none",
+              "shadow-xl border tooltip-enter",
+              "bg-slate-900 text-slate-100 border-slate-800 dark:bg-slate-900/95 dark:border-white/20 backdrop-blur-sm",
               tooltipPos
             )}
           >
@@ -267,10 +267,10 @@ export default function IconAction({
       onBlur={() => setHovered(false)}
       className={cn(
         "relative inline-flex items-center justify-center w-7 h-7 rounded-md",
-        "bg-slate-800/60 hover:bg-slate-700/80",
-        "text-slate-300 hover:text-white",
-        "border border-white/5 hover:border-white/15",
-        "transition-colors",
+        "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/60 dark:hover:bg-slate-700/80",
+        "text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white",
+        "border border-slate-200/80 dark:border-white/5 hover:border-slate-300 dark:hover:border-white/15",
+        "transition-colors hover:z-50 focus:z-50",
         "text-[14px] leading-none",
         className
       )}
@@ -281,11 +281,11 @@ export default function IconAction({
         <span
           role="tooltip"
           className={cn(
-            "absolute z-50 px-2 py-1 rounded text-[11px] whitespace-nowrap pointer-events-none",
-            "shadow-lg border tooltip-enter",
+            "absolute z-[100] px-2.5 py-1 rounded-md text-[11px] font-medium whitespace-nowrap pointer-events-none",
+            "shadow-xl border tooltip-enter",
             copied
-              ? "bg-emerald-500 text-white border-emerald-300"
-              : "bg-slate-900 text-slate-100 border-white/15",
+              ? "bg-emerald-600 text-white border-emerald-400 font-semibold"
+              : "bg-slate-900 text-slate-100 border-slate-800 dark:bg-slate-900/95 dark:border-white/20 backdrop-blur-sm",
             tooltipPos
           )}
         >

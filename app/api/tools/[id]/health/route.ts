@@ -21,7 +21,13 @@ export async function POST(
     return NextResponse.json({ error: "Tool not found" }, { status: 404 });
   }
 
-  if (!tool.api_key_encrypted && tool.supports_multiple_keys === 0 && tool.type !== "llm_endpoint") {
+  if (
+    !tool.api_key_encrypted &&
+    tool.supports_multiple_keys === 0 &&
+    tool.type !== "llm_endpoint" &&
+    tool.type !== "mcp_server" &&
+    tool.name !== "agent-reach"
+  ) {
     return NextResponse.json(
       { error: "Tool has no API key configured" },
       { status: 400 }
@@ -59,7 +65,7 @@ export async function POST(
         perAccount.push({ accountId: acc.id, label: acc.label, ok: true, latencyMs: result.latencyMs });
       } else {
         const cls = classifyError(new Error(result.error ?? "Unknown"));
-        if (cls.kind === "rate_limit" || cls.kind === "transient") {
+        if (cls.kind === "rate_limit") {
           markAccountRateLimited(acc.id, cls.message, 300);
         } else if (cls.kind === "permanent") {
           markAccountError(acc.id, cls.message);
@@ -90,10 +96,10 @@ export async function POST(
   let result;
   if (tool.type === "llm_endpoint") {
     const endpoint =
-      tool.endpoint ?? process.env.LLM_LOCAL_URL ?? "http://srvubuntu01:8080";
+      tool.endpoint || process.env.LLM_LOCAL_URL || "http://100.119.37.120:11434";
     result = await checkLocalLLM(endpoint);
   } else if (HEALTH_CHECKS[tool.name]) {
-    result = await HEALTH_CHECKS[tool.name](tool.api_key_encrypted!);
+    result = await HEALTH_CHECKS[tool.name](tool.api_key_encrypted || tool.endpoint || "");
   } else {
     return NextResponse.json(
       { error: `No health check available for tool: ${tool.name}` },

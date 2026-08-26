@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useT } from "@/lib/i18n/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -15,37 +16,47 @@ interface KanbanCard {
 }
 
 const STAGES = [
-  { key: "lead" as const, label: "Lead", color: "border-slate-500", headerBg: "bg-slate-800/50" },
-  { key: "contacted" as const, label: "Contactado", color: "border-sky-500", headerBg: "bg-sky-500/20" },
-  { key: "meeting" as const, label: "Reunión agendada", color: "border-amber-500", headerBg: "bg-amber-500/20" },
-  { key: "proposal" as const, label: "Propuesta enviada", color: "border-violet-500", headerBg: "bg-violet-500/20" },
-  { key: "closed_won" as const, label: "✅ Cerrado ganado", color: "border-emerald-500", headerBg: "bg-emerald-500/20" },
-  { key: "closed_lost" as const, label: "❌ Cerrado perdido", color: "border-red-500", headerBg: "bg-red-500/20" },
+  { key: "lead" as const, labelKey: "crm.stages.lead", defaultLabel: "Lead Detectado", color: "border-slate-400 dark:border-slate-500", headerBg: "bg-slate-200/70 dark:bg-slate-800/50" },
+  { key: "contacted" as const, labelKey: "crm.stages.contacted", defaultLabel: "Contactado", color: "border-sky-500 dark:border-sky-500", headerBg: "bg-sky-100 dark:bg-sky-500/20" },
+  { key: "meeting" as const, labelKey: "crm.stages.meeting", defaultLabel: "Reunión Agendada", color: "border-amber-500 dark:border-amber-500", headerBg: "bg-amber-100 dark:bg-amber-500/20" },
+  { key: "proposal" as const, labelKey: "crm.stages.proposal", defaultLabel: "Propuesta Enviada", color: "border-violet-500 dark:border-violet-500", headerBg: "bg-violet-100 dark:bg-violet-500/20" },
+  { key: "closed_won" as const, labelKey: "crm.stages.closed_won", defaultLabel: "Cerrado Ganado", color: "border-emerald-500 dark:border-emerald-500", headerBg: "bg-emerald-100 dark:bg-emerald-500/20" },
+  { key: "closed_lost" as const, labelKey: "crm.stages.closed_lost", defaultLabel: "Cerrado Perdido", color: "border-rose-500 dark:border-rose-500", headerBg: "bg-rose-100 dark:bg-red-500/20" },
 ] as const;
 
 /** HTML5 dataTransfer payload for drag-and-drop between columns */
 const DRAG_MIME = "application/x-oportunia-business-id";
 
 const TIER_BADGE = {
-  hot: "bg-amber-500/20 text-amber-300",
-  warm: "bg-sky-500/20 text-sky-300",
-  nurture: "bg-emerald-500/20 text-emerald-300",
-  skip: "bg-slate-700 text-slate-400",
+  hot: "bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-500/20 dark:text-amber-300 dark:border-transparent font-semibold",
+  warm: "bg-sky-50 text-sky-800 border border-sky-200 dark:bg-sky-500/20 dark:text-sky-300 dark:border-transparent font-semibold",
+  nurture: "bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-transparent font-semibold",
+  skip: "bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-700 dark:text-slate-400 dark:border-transparent font-medium",
 };
 
+// Module-level in-memory cache for 0ms instant switching between sections
+let cachedKanbanData: Record<string, KanbanCard[]> | null = null;
+
 export default function CRMPage() {
-  const [kanban, setKanban] = React.useState<Record<string, KanbanCard[]> | null>(null);
-  const [loading, setLoading] = React.useState(true);
+  const { t } = useT();
+  const [kanban, setKanban] = React.useState<Record<string, KanbanCard[]> | null>(() => cachedKanbanData);
+  const [loading, setLoading] = React.useState(() => !cachedKanbanData);
   // Drag-and-drop state
   const [draggingId, setDraggingId] = React.useState<string | null>(null);
   const [hoverStage, setHoverStage] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
-    setLoading(true);
-    const res = await fetch("/api/crm/kanban");
-    const data = await res.json();
-    setKanban(data.kanban);
-    setLoading(false);
+    if (!cachedKanbanData) setLoading(true);
+    try {
+      const res = await fetch("/api/crm/kanban");
+      const data = await res.json();
+      cachedKanbanData = data.kanban ?? null;
+      setKanban(data.kanban);
+    } catch {
+      /* ignore */
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   React.useEffect(() => { load(); }, [load]);
@@ -192,29 +203,24 @@ export default function CRMPage() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-radial">
-      <div className="p-6 md:p-8 space-y-4">
-        <div className="flex items-start justify-between flex-wrap gap-4">
-          <div>
-            <h1 className="text-3xl font-bold font-display text-gradient-brand">CRM · Pipeline</h1>
-            <p className="text-sm text-slate-400 mt-1">
-              Arrastrá una card entre columnas, o usá los botones ← / →. Lead → Contactado → Reunión → Propuesta → Cerrado.
-            </p>
-          </div></div>
-
-        <div className="flex items-center gap-3 text-sm">
-          <a href="/" className="text-sky-400">← Inicio</a>
-          <span className="text-slate-700">·</span>
-          <a href="/lists" className="text-sky-400">Listas</a>
-          <span className="text-slate-700">·</span>
-          <a href="/radar" className="text-sky-400">Radar</a>
+    <div className="p-4 md:p-6 space-y-4 max-w-[1600px] mx-auto">
+      <div className="flex items-start justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold font-display text-slate-900 dark:text-slate-100">
+            {t("crm.title", "Pipeline CRM")}
+          </h1>
+          <p className="text-xs md:text-sm text-slate-600 dark:text-slate-400 mt-1 font-medium">
+            {t("crm.subtitle", "Arrastra una tarjeta entre columnas, o usa los botones ← / → para avanzar de etapa comercial.")}
+          </p>
         </div>
+      </div>
 
         {loading ? (
-          <Card><CardContent className="py-12 text-center text-slate-400">Cargando pipeline...</CardContent></Card>
+          <Card><CardContent className="py-12 text-center text-slate-400">{t("crm.loading", "Cargando pipeline...")}</CardContent></Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 overflow-x-auto">
             {STAGES.map((stage) => {
+              const stageLabel = t(stage.labelKey, stage.defaultLabel);
               const cards = kanban?.[stage.key] ?? [];
               const isHover = hoverStage === stage.key;
               return (
@@ -223,40 +229,44 @@ export default function CRMPage() {
                   onDragOver={(e) => onColumnDragOver(e, stage.key)}
                   onDragLeave={() => onColumnDragLeave(stage.key)}
                   onDrop={(e) => onColumnDrop(e, stage.key)}
-                  className={`rounded-lg border-t-4 ${stage.color} ${
+                  className={`rounded-lg border ${stage.color} ${
                     isHover
-                      ? "bg-sky-500/10 ring-2 ring-sky-400 ring-offset-2 ring-offset-slate-950"
-                      : "bg-slate-900/40"
+                      ? "bg-sky-50 dark:bg-sky-500/10 ring-2 ring-sky-400 ring-offset-2 ring-offset-slate-950"
+                      : "bg-slate-100/70 dark:bg-slate-900/40"
                   } p-3 min-h-[300px] transition-colors`}
                 >
-                  <div className={`${stage.headerBg} rounded px-2 py-1 mb-3`}>
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">
-                      {stage.label}
+                  <div className={`${stage.headerBg} rounded-md px-2 py-1.5 mb-3 border border-slate-200/60 dark:border-white/5`}>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                      {stageLabel}
                     </h3>
-                    <p className="text-[10px] text-slate-500 mt-0.5">{cards.length} negocios</p>
+                    <p className="text-[10px] text-slate-600 dark:text-slate-400 mt-0.5 font-medium">
+                      {t("crm.leadCount", { count: cards.length }, `${cards.length} prospectos`)}
+                    </p>
                   </div>
 
                   <div className="space-y-2">
                     {cards.length === 0 ? (
                       <p
                         className={`text-xs italic text-center py-4 ${
-                          isHover ? "text-sky-300" : "text-slate-600"
+                          isHover ? "text-sky-700 dark:text-sky-300" : "text-slate-400 dark:text-slate-600"
                         }`}
                       >
-                        {isHover ? "↓ Soltá acá" : "Vacío"}
+                        {isHover ? "↓ Soltá acá" : t("crm.emptyStage", "Sin prospectos")}
                       </p>
                     ) : (
                       cards.map((card) => {
                         const currentIdx = STAGES.findIndex((s) => s.key === stage.key);
                         const nextStage = STAGES[currentIdx + 1];
                         const prevStage = STAGES[currentIdx - 1];
+                        const nextLabel = nextStage ? t(nextStage.labelKey, nextStage.defaultLabel) : "";
+                        const prevLabel = prevStage ? t(prevStage.labelKey, prevStage.defaultLabel) : "";
                         const isDragging = draggingId === card.business_id;
                         return (
                           <Card
                             key={card.business_id}
-                            className={`card-glass-hover cursor-grab active:cursor-grabbing ${
-                              isDragging ? "opacity-40 scale-95" : ""
-                            } transition-all`}
+                            className={`card-glass-hover kanban-grab ${
+                              isDragging ? "opacity-40 scale-95 kanban-grabbing ring-2 ring-sky-500" : ""
+                            } transition-all select-none`}
                             draggable
                             onDragStart={(e) => onDragStart(e, card.business_id)}
                             onDragEnd={onDragEnd}
@@ -264,20 +274,20 @@ export default function CRMPage() {
                             <CardContent className="p-3 space-y-2">
                               <a
                                 href={`/radar/${card.business_id}`}
-                                className="block"
+                                className="block group"
                                 onClick={(e) => e.stopPropagation()}
                                 draggable={false}
                               >
-                                <p className="text-xs font-semibold text-slate-100 leading-tight line-clamp-2">
+                                <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 group-hover:text-sky-600 dark:group-hover:text-sky-300 leading-tight line-clamp-2 transition-colors">
                                   {card.business_name}
                                 </p>
                                 {card.city && (
-                                  <p className="text-[10px] text-slate-500">📍 {card.city}</p>
+                                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">📍 {card.city}</p>
                                 )}
                               </a>
                               {card.total_score !== null ? (
                                 <div className="flex items-center gap-2">
-                                  <span className="text-base font-bold text-sky-300">
+                                  <span className="text-base font-bold text-sky-700 dark:text-sky-300 font-mono">
                                     {card.total_score}
                                   </span>
                                   {card.tier && (
@@ -287,34 +297,30 @@ export default function CRMPage() {
                                   )}
                                 </div>
                               ) : (
-                                /* No score yet — show a "Calcular" button so
-                                   the user can trigger the deterministic
-                                   score inline. The API may also queue
-                                   a background rescore on /api/crm/move. */
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     rescore(card.business_id);
                                   }}
                                   disabled={rescoringId === card.business_id}
-                                  className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 hover:bg-amber-500/25 disabled:opacity-50"
-                                  title="Calcular score con los datos de Google Places"
+                                  className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 text-amber-800 dark:text-amber-300 hover:bg-amber-100 disabled:opacity-50 font-medium"
+                                  title={t("crm.rescoreTooltip", "Calcular score con los datos de Google Places")}
                                 >
                                   {rescoringId === card.business_id ? (
                                     <>
                                       <span
-                                        className="inline-block w-2.5 h-2.5 border-2 border-amber-300 border-t-transparent rounded-full animate-spin"
+                                        className="inline-block w-2.5 h-2.5 border-2 border-amber-600 dark:border-amber-300 border-t-transparent rounded-full animate-spin"
                                         aria-hidden="true"
                                       />
-                                      Calculando...
+                                      {t("crm.calculating", "Calculando...")}
                                     </>
                                   ) : (
-                                    <>— Calcular</>
+                                    <>{t("crm.calculate", "— Calcular")}</>
                                   )}
                                 </button>
                               )}
                               {card.last_activity && (
-                                <p className="text-[10px] text-slate-500 dark:text-slate-500 italic line-clamp-1">
+                                <p className="text-[10px] text-slate-500 dark:text-slate-400 italic line-clamp-1">
                                   {card.last_activity}
                                 </p>
                               )}
@@ -322,8 +328,8 @@ export default function CRMPage() {
                                 {prevStage && (
                                   <button
                                     onClick={() => moveToStage(card.business_id, prevStage.key)}
-                                    className="text-[10px] text-slate-500 dark:text-slate-500 hover:text-slate-300 dark:hover:text-slate-200 px-1"
-                                    title={`Mover a ${prevStage.label}`}
+                                    className="text-[10px] text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 px-1 font-medium"
+                                    title={`${t("crm.moveLeft", "← Mover")} ${prevLabel}`}
                                   >
                                     ←
                                   </button>
@@ -331,10 +337,10 @@ export default function CRMPage() {
                                 {nextStage && (
                                   <button
                                     onClick={() => moveToStage(card.business_id, nextStage.key)}
-                                    className="text-[10px] text-sky-400 dark:text-sky-500 hover:text-sky-300 dark:hover:text-sky-600 px-1 ml-auto"
-                                    title={`Mover a ${nextStage.label}`}
+                                    className="text-[10px] text-sky-700 dark:text-sky-400 hover:underline px-1 ml-auto font-medium"
+                                    title={`${t("crm.moveRight", "Mover →")} ${nextLabel}`}
                                   >
-                                    {nextStage.label} →
+                                    {nextLabel} →
                                   </button>
                                 )}
                               </div>
@@ -353,7 +359,7 @@ export default function CRMPage() {
                                   }}
                                   disabled={removingId === card.business_id}
                                   className="w-full text-[11px] font-medium text-red-600 dark:text-red-300 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 border border-red-200 dark:border-red-500/30 hover:border-red-400 dark:hover:border-red-500/60 disabled:opacity-50 disabled:cursor-wait mt-1 py-1 rounded transition-colors flex items-center justify-center gap-1.5"
-                                  title="Quitar este negocio del pipeline (solo disponible en LEAD)"
+                                  title={t("crm.deleteTooltip", "Quitar este prospecto del pipeline comercial")}
                                 >
                                   {removingId === card.business_id ? (
                                     <>
@@ -361,12 +367,12 @@ export default function CRMPage() {
                                         className="inline-block w-3 h-3 border-2 border-red-300 border-t-transparent rounded-full animate-spin"
                                         aria-hidden="true"
                                       />
-                                      Eliminando...
+                                      {t("common.loading", "Eliminando...")}
                                     </>
                                   ) : (
                                     <>
                                       <span aria-hidden="true">🗑️</span>
-                                      <span>Eliminar del pipeline</span>
+                                      <span>{t("crm.deleteFromPipeline", "Eliminar del pipeline")}</span>
                                     </>
                                   )}
                                 </button>
@@ -394,6 +400,5 @@ export default function CRMPage() {
           </Card>
         )}
       </div>
-    </main>
   );
 }

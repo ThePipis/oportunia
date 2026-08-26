@@ -48,7 +48,16 @@ export function classifyError(err: unknown): ClassifiedError {
     return { kind: "permanent", message: msg, status };
   }
 
+  // Target URL failures (website down, blocked, or invalid) are NOT account errors
+  if (/SCRAPE_ALL_ENGINES_FAILED|URL is invalid|page doesn't exist|DNS lookup|ECONNREFUSED|ENOTFOUND|CERT_HAS_EXPIRED/i.test(msg)) {
+    return { kind: "fatal", message: msg, status };
+  }
+
   if (status === 429) {
+    // Short burst QPS limits (Yelp, etc.) should not lock out the account with a 5-min cooldown
+    if (/TOO_MANY_REQUESTS_PER_SECOND|queries-per-second|per_second/i.test(msg)) {
+      return { kind: "transient", message: msg, status };
+    }
     // Per-minute or per-day rate limit (transient, retry after cooldown)
     // unless the message specifically indicates per-day or monthly
     if (/per\s+(day|month|project)|daily|monthly|PlacesAPIQueriesPerDayPerProject/i.test(msg)) {

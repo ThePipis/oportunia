@@ -29,7 +29,7 @@ export interface RadarSearchState {
   selectedCategoryIds: string[];
   city: string;
   radiusMiles: number;
-  maxResults: number;
+  maxResults: number | null;
   // Map
   origin: { lat: number; lng: number };
   selectedBusinessId: string | null;
@@ -52,14 +52,19 @@ export interface SearchResult {
   lng?: number | null;
   phone?: string | null;
   website?: string | null;
+  total_score?: number | null;
+  tier?: "hot" | "warm" | "nurture" | "skip" | null;
+  matched_services_count?: number | null;
+  matched_service_names?: string[] | null;
+  matched_service_names_en?: string[] | null;
 }
 
 const DEFAULT_STATE: RadarSearchState = {
   query: "",
   selectedCategoryIds: [],
-  city: "7940 Vandewater St, Eastvale, CA 92880",
+  city: "",
   radiusMiles: 5,
-  maxResults: 15,
+  maxResults: null,
   origin: { lat: 33.9425, lng: -117.5632 },
   selectedBusinessId: null,
   results: [],
@@ -93,7 +98,7 @@ function loadFromStorage(): RadarSearchState {
       maxResults:
         typeof parsed.maxResults === "number" && parsed.maxResults > 0
           ? parsed.maxResults
-          : DEFAULT_STATE.maxResults,
+          : null,
       origin:
         parsed.origin &&
         typeof parsed.origin.lat === "number" &&

@@ -28,6 +28,7 @@ export interface GeocodeSuggestion {
   type: string;
   category: string;
   importance: number;
+  suggestedRadiusMiles?: number;
 }
 
 interface LocationSearchProps {
@@ -36,7 +37,12 @@ interface LocationSearchProps {
   /** Fired on every keystroke */
   onChange: (text: string) => void;
   /** Fired when the user picks a suggestion (click or Enter) */
-  onLocationSelect: (lat: number, lng: number, displayName: string) => void;
+  onLocationSelect: (
+    lat: number,
+    lng: number,
+    displayName: string,
+    suggestedRadiusMiles?: number
+  ) => void;
   /** Placeholder text */
   placeholder?: string;
   /** Optional className for the outer wrapper */
@@ -173,7 +179,7 @@ export default function LocationSearch({
   const handleSelect = React.useCallback(
     (r: GeocodeSuggestion) => {
       onChange(r.short_name);
-      onLocationSelect(r.lat, r.lng, r.display_name);
+      onLocationSelect(r.lat, r.lng, r.display_name, r.suggestedRadiusMiles);
       setOpen(false);
       setResults([]);
       inputRef.current?.blur();
@@ -228,14 +234,15 @@ export default function LocationSearch({
           aria-expanded={showDropdown}
           aria-autocomplete="list"
           aria-controls="oportunia-location-search-listbox"
-          className="flex h-10 w-full rounded-md border border-white/10 bg-slate-900/60 pl-9 pr-9 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+          title={value || placeholder}
+          className="flex h-10 w-full rounded-md border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900/60 pl-9 pr-9 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 shadow-2xs"
         />
 
         {/* Left icon (search or spinner) */}
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
           {loading ? (
             <svg
-              className="animate-spin text-sky-400"
+              className="animate-spin text-sky-500 dark:text-sky-400"
               width="14"
               height="14"
               viewBox="0 0 24 24"
@@ -274,7 +281,7 @@ export default function LocationSearch({
               setOpen(false);
               inputRef.current?.focus();
             }}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200 w-6 h-6 flex items-center justify-center rounded hover:bg-white/5"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-200 w-6 h-6 flex items-center justify-center rounded hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
             aria-label="Limpiar"
             tabIndex={-1}
           >
@@ -288,19 +295,19 @@ export default function LocationSearch({
         <div
           id="oportunia-location-search-listbox"
           role="listbox"
-          className="absolute z-50 mt-1 w-full rounded-md border border-white/10 bg-slate-900 shadow-2xl shadow-black/40 max-h-80 overflow-y-auto"
+          className="absolute z-50 mt-1 w-full rounded-md border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-2xl max-h-80 overflow-y-auto"
         >
           {error && (
-            <div className="px-3 py-2 text-xs text-red-400">⚠️ {error}</div>
+            <div className="px-3 py-2 text-xs text-red-600 dark:text-red-400">⚠️ {error}</div>
           )}
           {rateLimited && (
-            <div className="px-3 py-2 text-xs text-amber-400">
+            <div className="px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
               ⏱ Espera 1 segundo antes de buscar de nuevo
             </div>
           )}
           {!error && !rateLimited && !loading && results.length === 0 && (
             <div className="px-3 py-3 text-xs text-slate-500">
-              Sin resultados para <span className="text-slate-300">"{value}"</span>
+              Sin resultados para <span className="text-slate-700 dark:text-slate-300 font-medium">"{value}"</span>
             </div>
           )}
           {results.map((r, i) => (
@@ -311,20 +318,24 @@ export default function LocationSearch({
               aria-selected={i === highlighted}
               onClick={() => handleSelect(r)}
               onMouseEnter={() => setHighlighted(i)}
-              className={`w-full text-left px-3 py-2 flex items-start gap-2 border-b border-white/5 last:border-b-0 transition-colors ${
+              title={r.display_name}
+              className={`w-full text-left px-3 py-2 flex items-start gap-2 border-b border-slate-100 dark:border-white/5 last:border-b-0 transition-colors ${
                 i === highlighted
-                  ? "bg-sky-500/15"
-                  : "hover:bg-slate-800/50"
+                  ? "bg-sky-50 dark:bg-sky-500/15"
+                  : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
               }`}
             >
               <span className="text-base shrink-0 mt-0.5" aria-hidden="true">
                 {iconForCategory(r.category)}
               </span>
-              <span className="flex-1 min-w-0">
-                <div className="text-sm text-slate-100 truncate font-medium">
+              <span className="flex-1 min-w-0" title={r.display_name}>
+                <div className="text-sm text-slate-900 dark:text-slate-100 truncate font-semibold">
                   {r.short_name}
                 </div>
-                <div className="text-[11px] text-slate-500 truncate">
+                <div
+                  className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5"
+                  title={r.display_name}
+                >
                   {r.display_name}
                 </div>
               </span>

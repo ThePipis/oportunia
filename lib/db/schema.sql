@@ -130,6 +130,8 @@ CREATE TABLE IF NOT EXISTS business_scores (
   tier TEXT NOT NULL DEFAULT 'skip' CHECK (tier IN ('hot', 'warm', 'nurture', 'skip')),
   -- Reasoning generado por LLM (opcional, Tier 2)
   reasoning_text TEXT,
+  -- Talking points generados por IA persistidos
+  talking_points_json TEXT,
   last_calculated INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
   FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE
 );

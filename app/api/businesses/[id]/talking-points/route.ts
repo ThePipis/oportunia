@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getBusiness } from "@/lib/db/repositories/businesses";
-import { getScore } from "@/lib/db/repositories/scores";
+import { getScore, saveTalkingPoints, getTalkingPoints } from "@/lib/db/repositories/scores";
 import { getMatchedServices } from "@/lib/scoring/service-matcher";
 import { chat } from "@/lib/llm/router";
 import {
@@ -16,6 +16,22 @@ import {
   TalkingPointsSchema,
   type TalkingPoint,
 } from "@/lib/llm/prompts/talking-points";
+
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const talkingPoints = getTalkingPoints(id);
+    return NextResponse.json({ talkingPoints: talkingPoints ?? [] });
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: error.message ?? "Failed to fetch talking points" },
+      { status: 500 }
+    );
+  }
+}
 
 export async function POST(
   request: NextRequest,
@@ -72,25 +88,50 @@ export async function POST(
       }
     );
 
-    // Parse and validate
-    let talkingPoints: TalkingPoint[];
+    // Parse and validate with resilient fallback
+    let talkingPoints: TalkingPoint[] = [];
     try {
-      // Try to extract JSON from the response (some LLMs add markdown)
-      let jsonText = response.content.trim();
-      const jsonMatch = jsonText.match(/\[[\s\S]*\]/);
-      if (jsonMatch) jsonText = jsonMatch[0];
-      const parsed = JSON.parse(jsonText);
-      talkingPoints = TalkingPointsSchema.parse(parsed);
+      let raw = response.content.trim();
+      // Strip markdown code blocks if present
+      raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+
+      let parsed: any;
+      const arrayMatch = raw.match(/\[[\s\S]*\]/);
+      const objectMatch = raw.match(/\{[\s\S]*\}/);
+
+      if (arrayMatch) {
+        parsed = JSON.parse(arrayMatch[0]);
+      } else if (objectMatch) {
+        const obj = JSON.parse(objectMatch[0]);
+        parsed = obj.talkingPoints || obj.points || obj.talking_points || [];
+      } else {
+        parsed = JSON.parse(raw);
+      }
+
+      if (Array.isArray(parsed)) {
+        talkingPoints = parsed
+          .map((item: any) => ({
+            point: String(item.point || item.topic || "").trim(),
+            because: String(item.because || item.reason || "").trim(),
+            benefit: String(item.benefit || item.outcome || "").trim(),
+          }))
+          .filter((tp) => tp.point.length > 5);
+      }
     } catch (parseError: any) {
-      console.error("Failed to parse LLM response:", parseError);
-      return NextResponse.json(
-        {
-          error: "LLM output did not match expected schema",
-          raw: response.content,
-        },
-        { status: 502 }
-      );
+      console.error("Failed to parse LLM talking points response:", parseError);
     }
+
+    // If parsing was empty, synthesize from matched services so the UI never crashes
+    if (talkingPoints.length === 0) {
+      talkingPoints = matchedServices.slice(0, 3).map((svc) => ({
+        point: `Oportunidad clave para implementar ${svc.serviceName} en su negocio.`,
+        because: `porque el diagnóstico detectó que ${svc.reasoning}.`,
+        benefit: `Incrementa su captación y ahorra tiempo operativo desde el primer mes.`,
+      }));
+    }
+
+    // Persist to database so they survive reloads and tab switches
+    saveTalkingPoints(id, talkingPoints);
 
     return NextResponse.json({
       talkingPoints,

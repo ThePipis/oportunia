@@ -11,6 +11,7 @@ import type { ScoreBreakdown } from "./algorithm";
 export interface MatchedService {
   serviceId: string;
   serviceName: string;
+  serviceNameEn?: string;
   serviceIcon: string;
   serviceTier: number;
   relevance: number; // 0-100
@@ -196,6 +197,7 @@ export function matchServices(input: MatchInput): MatchedService[] {
       matches.push({
         serviceId: svc.id,
         serviceName: svc.name,
+        serviceNameEn: svc.name_en ?? svc.name,
         serviceIcon: svc.icon ?? "🔧",
         serviceTier: svc.tier,
         relevance,
@@ -259,7 +261,7 @@ export function getMatchedServices(businessId: string): MatchedService[] {
               sc.price_setup, sc.price_monthly, sc.pitch_template, sc.pitch_template_en
        FROM business_services bs
        JOIN service_catalog sc ON sc.id = bs.service_id
-       WHERE bs.business_id = ?
+       WHERE bs.business_id = ? AND sc.active = 1
        ORDER BY bs.relevance DESC`
     )
     .all(businessId) as any[];
@@ -267,6 +269,7 @@ export function getMatchedServices(businessId: string): MatchedService[] {
   return rows.map((r) => ({
     serviceId: r.service_id,
     serviceName: r.service_name,
+    serviceNameEn: r.name_en ?? r.service_name,
     serviceIcon: r.icon ?? "🔧",
     serviceTier: r.tier,
     relevance: r.relevance,

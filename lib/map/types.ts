@@ -15,6 +15,8 @@ export interface BusinessMarker {
   phone?: string | null;
   website?: string | null;
   distanceMiles?: number | null;
+  totalScore?: number | null;
+  tier?: "hot" | "warm" | "nurture" | "skip" | null;
 }
 
 export interface RadarMapOrigin {

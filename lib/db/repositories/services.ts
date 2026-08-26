@@ -131,3 +131,9 @@ export function toggleServiceActive(id: string): Service | null {
     .run(Math.floor(Date.now() / 1000), id);
   return getService(id);
 }
+
+export function updateTierActive(tier: number, active: boolean): void {
+  const db = getDb();
+  db.prepare(`UPDATE service_catalog SET active = ?, updated_at = ? WHERE tier = ?`)
+    .run(active ? 1 : 0, Math.floor(Date.now() / 1000), tier);
+}

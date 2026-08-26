@@ -1,16 +1,13 @@
 /**
  * API: /api/businesses/[id]/rescore
- * POST - recalculate the 5D score for a business
- *
- * Currently uses only Google Places data (no website crawl yet).
- * Will be enhanced in Phase 4 with Firecrawl-derived signals.
+ * POST - recalculate the sincere 5D score and AI recommendations for a business
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { getBusiness } from "@/lib/db/repositories/businesses";
-import { saveScore } from "@/lib/db/repositories/scores";
-import { calculateScore } from "@/lib/scoring/algorithm";
-import type { ScoringInput } from "@/lib/scoring/algorithm";
+import { runDeepScoringPipeline } from "@/lib/scoring/pipeline";
+import { matchServices, saveMatchedServices } from "@/lib/scoring/service-matcher";
+import { synthesizeRecommendationsWithAI } from "@/lib/scoring/synthesis";
 
 export async function POST(
   _request: NextRequest,
@@ -26,58 +23,61 @@ export async function POST(
       );
     }
 
-    // Determine sector/ticket from business data
-    const sectorId = business.sector_id;
-    const primaryType = business.primary_type;
+    const { score, digitalSignals, websiteCrawled } = await runDeepScoringPipeline(
+      business,
+      { forceRefresh: true }
+    );
+
     const is24_7 =
-      primaryType?.toLowerCase().includes("emergency") ||
-      primaryType?.toLowerCase().includes("24") ||
+      business.primary_type?.toLowerCase().includes("emergency") ||
+      business.primary_type?.toLowerCase().includes("24") ||
       false;
 
-    // Estimate ticket from sector (rough heuristic; will improve with sector catalog)
-    const HIGH_TICKET_TYPES = ["hvac", "plumb", "roof", "electric", "solar", "dental", "water"];
-    const MEDIUM_TICKET_TYPES = ["restaurant", "cafe", "salon", "barber", "gym", "lawyer", "veter"];
-    let avgTicket: number | null = null;
-    if (primaryType && HIGH_TICKET_TYPES.some((t) => primaryType.toLowerCase().includes(t))) {
-      avgTicket = 1500;
-    } else if (primaryType && MEDIUM_TICKET_TYPES.some((t) => primaryType.toLowerCase().includes(t))) {
-      avgTicket = 300;
-    }
+    const yearsInBusiness =
+      business.review_count && business.review_count > 0
+        ? Math.max(1, Math.round(business.review_count / 18))
+        : null;
 
-    const input: ScoringInput = {
-      digitalSignals: null, // will be filled in Phase 4 with Firecrawl
+    // ── Synthesize AI services using Smart Router (Llama.cpp / Gemini) ──
+    const matchInput = {
+      score,
+      brechaDigital: score.breakdown.brechaDigital,
+      gapOperativo: score.breakdown.gapOperativo,
+      fitNegocio: score.breakdown.fitNegocio,
+      senalesCompra: score.breakdown.senalesCompra,
+      proximidad: score.breakdown.proximidad,
+      sector: business.sector_id,
+      primaryType: business.primary_type,
+      is24_7Emergency: is24_7,
       hasGoogleRating: business.google_rating !== null,
       reviewCount: business.review_count,
-      hasPhone: !!business.phone,
-      hasEmail: !!business.email,
-      sector: sectorId,
-      primaryType,
-      avgTicketUsd: avgTicket,
-      distanceMiles: business.distance_miles,
-      is24_7Emergency: is24_7,
-      locationCount: null,
-      yearsInBusiness: null,
-      lastReviewAt: null,
-      lastPostAt: null,
-      employeeCount: null,
-      hasActiveAds: null,
+      hasWebsiteCrawled: !!digitalSignals,
+      hasChat: digitalSignals?.has_chat ?? false,
+      hasBooking: digitalSignals?.has_booking ?? false,
+      hasContactForm: digitalSignals?.has_contact_form ?? false,
+      mentions_24_7: digitalSignals?.mentions_24_7 ?? false,
+      hasSocial: digitalSignals?.has_social ?? false,
+      hasActiveAds: digitalSignals?.has_active_ads ?? false,
+      yearsInBusiness,
+      avgTicketUsd: null,
     };
 
-    const score = calculateScore(input);
-    const saved = saveScore(id, score);
+    const heuristicMatched = matchServices(matchInput);
+    const matched = await synthesizeRecommendationsWithAI(
+      business,
+      matchInput,
+      heuristicMatched
+    );
+    saveMatchedServices(id, matched);
 
     return NextResponse.json({
       businessId: id,
-      total: saved.total_score,
-      tier: saved.tier,
-      breakdown: {
-        brechaDigital: saved.score_brecha_digital,
-        gapOperativo: saved.score_gap_operativo,
-        fitNegocio: saved.score_fit_negocio,
-        senalesCompra: saved.score_senales_compra,
-        proximidad: saved.score_proximidad,
-      },
-      reasoning: JSON.parse(saved.breakdown_json ?? "{}").reasoning ?? null,
+      total: score.total,
+      tier: score.tier,
+      breakdown: score.breakdown,
+      reasoning: score.reasoning,
+      matchedServices: matched,
+      websiteCrawled,
     });
   } catch (error: any) {
     console.error(`POST /api/businesses/[id]/rescore failed:`, error);

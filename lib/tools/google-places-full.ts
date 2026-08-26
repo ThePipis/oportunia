@@ -75,6 +75,12 @@ export interface TextSearchRequest {
     longitude: number;
     radiusMeters: number;
   };
+  /** Restrict results strictly to a specific circle boundary */
+  locationRestriction?: {
+    latitude: number;
+    longitude: number;
+    radiusMeters: number;
+  };
   /** Restrict to a region (e.g. "US") */
   regionCode?: string;
   /** Max results (default 20, max 60) */
@@ -93,12 +99,36 @@ export async function textSearch(
   apiKey: string,
   request: TextSearchRequest
 ): Promise<PlaceSearchResult[]> {
-  const body: Record<string, unknown> = {
+  const targetCount = Math.min(request.maxResultCount ?? 20, 60);
+  const places: PlaceSearchResult[] = [];
+  let pageToken: string | undefined = undefined;
+
+  const baseBody: Record<string, unknown> = {
     textQuery: request.query,
-    maxResultCount: Math.min(request.maxResultCount ?? 20, 60),
+    pageSize: Math.min(targetCount, 20),
   };
-  if (request.locationBias) {
-    body.locationBias = {
+
+  if (request.locationRestriction) {
+    const lat = request.locationRestriction.latitude;
+    const lng = request.locationRestriction.longitude;
+    const radiusM = request.locationRestriction.radiusMeters;
+    const latDelta = radiusM / 111320;
+    const lngDelta = radiusM / (111320 * Math.cos((lat * Math.PI) / 180));
+
+    baseBody.locationRestriction = {
+      rectangle: {
+        low: {
+          latitude: Math.max(-90, lat - latDelta),
+          longitude: Math.max(-180, lng - lngDelta),
+        },
+        high: {
+          latitude: Math.min(90, lat + latDelta),
+          longitude: Math.min(180, lng + lngDelta),
+        },
+      },
+    };
+  } else if (request.locationBias) {
+    baseBody.locationBias = {
       circle: {
         center: {
           latitude: request.locationBias.latitude,
@@ -108,28 +138,40 @@ export async function textSearch(
       },
     };
   }
-  if (request.regionCode) body.regionCode = request.regionCode;
-  if (request.openNow) body.openNow = true;
-  if (request.minRating) body.minRating = request.minRating;
+  if (request.regionCode) baseBody.regionCode = request.regionCode;
+  if (request.openNow) baseBody.openNow = true;
+  if (request.minRating) baseBody.minRating = request.minRating;
 
-  const res = await fetch(`${API_BASE}/places:searchText`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": apiKey,
-      "X-Goog-FieldMask":
-        "places.id,places.displayName,places.formattedAddress,places.location,places.types,places.primaryType,places.rating,places.userRatingCount,places.businessStatus",
-    },
-    body: JSON.stringify(body),
-  });
+  let iterations = 0;
+  while (iterations < 3 && places.length < targetCount) {
+    iterations++;
+    const reqBody: Record<string, unknown> = pageToken ? { ...baseBody, pageToken } : baseBody;
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    throw new Error(`Google Places search HTTP ${res.status}: ${errText.slice(0, 300)}`);
+    const res: Response = await fetch(`${API_BASE}/places:searchText`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask":
+          "places.id,places.displayName,places.formattedAddress,places.location,places.types,places.primaryType,places.rating,places.userRatingCount,places.businessStatus,nextPageToken",
+      },
+      body: JSON.stringify(reqBody),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Google Places search HTTP ${res.status}: ${errText.slice(0, 300)}`);
+    }
+
+    const data: any = await res.json();
+    const newPlaces = (data.places ?? []) as PlaceSearchResult[];
+    places.push(...newPlaces);
+
+    pageToken = data.nextPageToken;
+    if (!pageToken) break;
   }
 
-  const data = await res.json();
-  return (data.places ?? []) as PlaceSearchResult[];
+  return places;
 }
 
 export async function placeDetails(

@@ -24,7 +24,9 @@
  */
 
 import * as React from "react";
+import { useT } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
+import { translateCategory } from "@/lib/categories/category-i18n";
 
 export interface CategoryOption {
   id: string;
@@ -47,8 +49,7 @@ interface CategoryMultiSelectProps {
 
 const SEARCH_DEBOUNCE_MS = 250;
 const MIN_SEARCH_CHARS = 1;
-const CHIPS_PER_ROW = 8;
-const MAX_VISIBLE_TOP = CHIPS_PER_ROW * 2; // 2 rows = 16
+const MAX_VISIBLE_TOP = 3; // Mostrar exactamente 3 categorías más usadas para mantener 1 sola fila limpia
 
 export default function CategoryMultiSelect({
   value,
@@ -56,6 +57,7 @@ export default function CategoryMultiSelect({
   className,
   maxSelections,
 }: CategoryMultiSelectProps) {
+  const { t, locale } = useT();
   const [search, setSearch] = React.useState("");
   const [suggestions, setSuggestions] = React.useState<CategoryOption[]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -380,12 +382,12 @@ export default function CategoryMultiSelect({
               className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-md bg-sky-100 border border-sky-300 text-sky-900 dark:bg-sky-500/20 dark:border-sky-500/40 dark:text-sky-100 text-xs"
             >
               <span aria-hidden="true">{c.icon || "🏷️"}</span>
-              <span className="font-medium">{c.display_name}</span>
+              <span className="font-medium">{translateCategory(c.display_name, locale)}</span>
               <button
                 type="button"
                 onClick={() => removeCategory(c.id)}
                 className="ml-0.5 w-4 h-4 inline-flex items-center justify-center rounded text-sky-700 hover:bg-sky-200 dark:text-sky-300 dark:hover:bg-sky-500/30 dark:hover:text-white"
-                aria-label={`Quitar ${c.display_name}`}
+                aria-label={`Quitar ${translateCategory(c.display_name, locale)}`}
                 tabIndex={-1}
               >
                 ✕
@@ -406,7 +408,7 @@ export default function CategoryMultiSelect({
               if (suggestions.length > 0) setOpen(true);
             }}
             onKeyDown={handleKeyDown}
-            placeholder={value.length === 0 ? "Buscar categoría (ej. plomería, dentista...)" : ""}
+            placeholder={value.length === 0 ? t("radar.categoryPlaceholder", "Todas las categorías") : ""}
             autoComplete="off"
             spellCheck={false}
             className="flex-1 min-w-[140px] bg-transparent text-sm text-slate-900 placeholder:text-slate-400 dark:text-slate-100 dark:placeholder:text-slate-500 focus:outline-none px-1 py-1"
@@ -432,9 +434,9 @@ export default function CategoryMultiSelect({
               type="button"
               onClick={clearAll}
               className="text-[11px] text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 px-2 py-0.5 rounded hover:bg-slate-100 dark:hover:bg-white/5"
-              aria-label="Limpiar todas las categorías"
+              aria-label={t("radar.clearAll", "Limpiar todo")}
             >
-              ✕ Limpiar
+              ✕ {t("common.clear", "Limpiar")}
             </button>
           </div>
         )}
@@ -450,7 +452,7 @@ export default function CategoryMultiSelect({
                 <svg className="animate-spin text-sky-500 dark:text-sky-400" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <path d="M21 12a9 9 0 1 1-6.219-8.56" />
                 </svg>
-                Buscando...
+                {t("radar.searching", "Buscando...")}
               </div>
             )}
             {error && (
@@ -458,11 +460,7 @@ export default function CategoryMultiSelect({
             )}
             {!loading && !error && suggestions.length === 0 && (
               <div className="px-3 py-3 text-xs text-slate-500">
-                Sin resultados para <span className="text-slate-900 dark:text-slate-300">"{search}"</span>.
-                <br />
-                <span className="text-slate-600 text-[10px]">
-                  Solo se pueden agregar categorías predefinidas.
-                </span>
+                {t("common.empty", "Sin resultados")} <span className="text-slate-900 dark:text-slate-300">"{search}"</span>.
               </div>
             )}
             {suggestions.map((c, i) => (
@@ -485,13 +483,13 @@ export default function CategoryMultiSelect({
                 </span>
                 <span className="flex-1 min-w-0">
                   <div className="text-sm text-slate-900 dark:text-slate-100 font-medium">
-                    {c.display_name}
+                    {translateCategory(c.display_name, locale)}
                   </div>
                   <div className="text-[11px] text-slate-500 truncate">
                     → {c.query}
                     {c.usage_count > 0 && (
                       <span className="ml-2 text-amber-500 dark:text-amber-400">
-                        ⭐ {c.usage_count} {c.usage_count === 1 ? "uso" : "usos"}
+                        ⭐ {c.usage_count}
                       </span>
                     )}
                   </div>
@@ -506,39 +504,35 @@ export default function CategoryMultiSelect({
       {topVisible.length > 0 && (
         <div className="relative">
           <div className="flex items-center gap-1.5 mb-1.5">
-            <span className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-500 font-semibold">
-              ⭐ Más usadas
+            <span className="text-[11px] uppercase tracking-wide text-slate-700 dark:text-slate-400 font-semibold">
+              ⭐ {t("radar.mostUsed", "Más usadas")}
             </span>
           </div>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-nowrap py-0.5">
             {topVisible.map((c) => (
               <button
                 key={c.id}
                 type="button"
                 onClick={() => addCategory(c)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border bg-white border-slate-300 text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:bg-slate-800/50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-slate-700/50 dark:hover:text-slate-100 transition-colors"
+                className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border bg-white border-slate-300 text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:bg-slate-800/50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-slate-700/50 dark:hover:text-slate-100 transition-colors shadow-2xs whitespace-nowrap"
               >
                 <span aria-hidden="true">{c.icon || "🏷️"}</span>
-                <span>{c.display_name}</span>
+                <span className="font-medium">{translateCategory(c.display_name, locale)}</span>
                 {c.usage_count > 0 && (
-                  <span className="ml-0.5 text-amber-500 dark:text-amber-400/80 text-[10px]">
+                  <span className="ml-0.5 text-amber-600 dark:text-amber-400 text-[10px] font-semibold">
                     {c.usage_count}
                   </span>
                 )}
               </button>
             ))}
-            {hasMoreBelow && (
-              <button
-                type="button"
-                onClick={openPopover}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border bg-sky-100 text-sky-700 border-sky-300 hover:bg-sky-200 dark:bg-sky-500/10 dark:text-sky-200 dark:border-sky-500/30 dark:hover:bg-sky-500/20"
-                title="Ver todas las categorías"
-              >
-                {totalAvailable !== null && totalAvailable > topVisible.length
-                  ? `+${totalAvailable - topVisible.length} más`
-                  : "+Ver todas"}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={openPopover}
+              className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100 hover:text-sky-800 dark:bg-sky-500/10 dark:text-sky-200 dark:border-sky-500/30 dark:hover:bg-sky-500/20 font-medium transition-colors shadow-2xs whitespace-nowrap"
+              title={t("radar.viewAll", "Ver todas")}
+            >
+              +{t("radar.viewAll", "Ver todas")}
+            </button>
           </div>
 
           {/* Popover with all categories */}
@@ -546,14 +540,14 @@ export default function CategoryMultiSelect({
             <div className="absolute z-40 left-0 right-0 mt-1 rounded-md border border-slate-300 bg-white shadow-2xl shadow-black/10 dark:border-white/10 dark:bg-slate-900 dark:shadow-black/50 max-h-80 overflow-y-auto">
               <div className="sticky top-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm px-3 py-2 border-b border-slate-200 dark:border-white/10 flex items-center justify-between">
                 <span className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 font-semibold">
-                  Todas las categorías ({popoverCats.length})
+                  {t("radar.allCategories", "Todas")} ({popoverCats.length})
                 </span>
                 <button
                   type="button"
                   onClick={() => setPopoverOpen(false)}
                   className="text-slate-500 hover:text-slate-900 dark:hover:text-slate-200 text-xs"
                 >
-                  ✕ Cerrar
+                  ✕ {t("common.close", "Cerrar")}
                 </button>
               </div>
               {popoverLoading ? (
@@ -582,7 +576,7 @@ export default function CategoryMultiSelect({
                         )}
                       >
                         <span aria-hidden="true">{c.icon || "🏷️"}</span>
-                        <span className="flex-1">{c.display_name}</span>
+                        <span className="flex-1">{translateCategory(c.display_name, locale)}</span>
                         {c.usage_count > 0 && (
                           <span className="text-amber-500 dark:text-amber-400/80 text-[10px]">
                             {c.usage_count}×

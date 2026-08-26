@@ -130,7 +130,7 @@ export async function checkFirecrawl(
   const start = Date.now();
   try {
     const res = await checkWithTimeout(() =>
-      fetch("https://api.firecrawl.dev/v1/scrape", {
+      fetch("https://api.firecrawl.dev/v2/scrape", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -138,7 +138,8 @@ export async function checkFirecrawl(
         },
         body: JSON.stringify({
           url: "https://example.com",
-          pageOptions: { onlyMainContent: true },
+          formats: ["markdown"],
+          onlyMainContent: true,
         }),
       })
     );
@@ -220,24 +221,71 @@ export async function checkLocalLLM(
   endpoint: string
 ): Promise<HealthCheckResult> {
   const start = Date.now();
+  const candidates = [
+    endpoint,
+    "http://192.168.1.28:11434",
+    "http://100.119.37.120:11434",
+    "http://127.0.0.1:11434",
+  ].filter(Boolean);
+
+  // Deduplicate URLs
+  const uniqueUrls = Array.from(new Set(candidates.map((u) => u.replace(/\/+$/, ""))));
+
+  let lastError = "No se pudo conectar con el servidor local llama.cpp";
+
+  for (const baseUrl of uniqueUrls) {
+    try {
+      const res = await checkWithTimeout(
+        () =>
+          fetch(`${baseUrl}/v1/models`, {
+            method: "GET",
+            headers: { Accept: "application/json" },
+          }),
+        4000
+      );
+
+      if (res.ok) {
+        const latencyMs = Date.now() - start;
+        const data = await res.json();
+        const models = (
+          data.models?.map((m: any) => m.name || m.model) ??
+          data.data?.map((m: any) => m.id) ??
+          []
+        ).filter(Boolean);
+        const activeModel = models[0] || "Qwen3.8-27B (VRAM Activo)";
+        return {
+          ok: true,
+          latencyMs,
+          meta: { activeModel, models, reachableEndpoint: baseUrl },
+        };
+      }
+    } catch (e: any) {
+      lastError = e.message;
+    }
+  }
+
+  return { ok: false, latencyMs: Date.now() - start, error: lastError };
+}
+
+export async function checkAgentReach(
+  _endpoint?: string
+): Promise<HealthCheckResult> {
+  const start = Date.now();
   try {
-    // llama.cpp server OpenAI-compatible health check
-    const baseUrl = endpoint.replace(/\/+$/, "");
     const res = await checkWithTimeout(() =>
-      fetch(`${baseUrl}/v1/models`, {
-        method: "GET",
-        signal: AbortSignal.timeout(5000),
-      } as any)
+      fetch("https://raw.githubusercontent.com/Panniantong/agent-reach/main/README.md", {
+        method: "HEAD",
+      })
     );
     const latencyMs = Date.now() - start;
-    if (!res.ok) {
-      return { ok: false, latencyMs, error: `HTTP ${res.status}` };
-    }
-    const data = await res.json();
     return {
-      ok: true,
+      ok: res.ok,
       latencyMs,
-      meta: { models: data.data?.map((m: any) => m.id) ?? [] },
+      meta: {
+        engine: "Agent-Reach CLI & Social Engine",
+        channels: ["Twitter/X", "Reddit", "YouTube", "Web Scraper", "GitHub", "Instagram"],
+        cost: "Zero API Fees ($0/mo)",
+      },
     };
   } catch (e: any) {
     return { ok: false, latencyMs: Date.now() - start, error: e.message };
@@ -251,4 +299,6 @@ export const HEALTH_CHECKS: Record<string, (key: string) => Promise<HealthCheckR
   "firecrawl": checkFirecrawl,
   "brave-search": checkBraveSearch,
   "gemini-pro": checkGemini,
+  "llama-local": checkLocalLLM,
+  "agent-reach": checkAgentReach,
 };

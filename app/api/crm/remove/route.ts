@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       business_id,
       type: "pipeline_removed",
       title: "Eliminado del pipeline",
-      pipeline_stage: null,
+      pipeline_stage: undefined,
       status: "completed",
     });
 

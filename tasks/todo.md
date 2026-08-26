@@ -1,0 +1,115 @@
+# Tareas del Proyecto (TODO)
+
+## Estado Actual
+- [x] Crear e instalar globalmente la skill `skill-creator`.
+- [x] Crear, instalar y optimizar globalmente la skill `i18n-architect` (auditoría integral de textos UI, extractor de cadenas hardcodeadas, verificación de paridad de diccionarios, soporte de interpolación y flujo de 6 fases para traducción 100% Inglés/Español).
+- [x] Instalar y activar globalmente la skill `ui-ux-pro-max` (84 estilos, 192 paletas, 74 tipografías, 192 tipos de producto, 98 reglas UX y scripts de búsqueda local).
+- [x] Crear, instalar y optimizar globalmente la skill `theme-architect` (v1.1.0: flujo de 6 fases, garantía de rollback, auditoría previa de primitivos base, prevención de colisiones de bordes Tailwind, antipatrones de inputs y matrices de componentes).
+- [x] Crear snapshot de respaldo y script de rollback total (`scripts/rollback-theme-refactor.ps1`).
+- [x] Auditar y refactorizar el Modo Claro y Oscuro de la app completa:
+  - [x] Eliminar inversión destructiva de Slate y 150+ líneas de `!important` en `app/globals.css`.
+  - [x] Mapear tokens semánticos en `tailwind.config.ts`.
+  - [x] Refactorizar navegación y cabecera `TopNav`, `ThemeToggle`, `LanguageToggle`.
+  - [x] Primitivos UI: `Card`, `Button`, `Input`, `Dialog`, y componente base `Label` (`components/ui/label.tsx`).
+  - [x] Radar (`app/radar/page.tsx` y `app/radar/[id]/page.tsx`):
+    - [x] Labels de filtros ("Ubicación", "Categoría", "Búsqueda personalizada", "Radio de búsqueda").
+    - [x] Controles de paginación (`Filas: 5 10 15 20 25`, botones de número de página y flechas de navegación).
+    - [x] Toggle y caja numérica de límite máx. de resultados y slider.
+    - [x] Banner de búsqueda anterior restaurada ("🔁 Búsqueda anterior restaurada..."): fondo azul suave `bg-sky-100/80`, borde `border-sky-300` y textos azul marino de alto contraste `text-sky-950` / `text-sky-800` en modo claro.
+    - [x] Categorías más usadas ("⭐ MÁS USADAS"): ajustadas a un máximo de 3 sugerencias con `flex-nowrap`, `shrink-0` y `whitespace-nowrap` para visualizarse estrictamente en una sola fila limpia junto con el botón `+Ver todas`.
+    - [x] Cabecera de Radar: subtítulo unificado en la misma fila junto al título entre paréntesis `Radar de Búsqueda (Encuentra negocios reales...)` sin salto de línea.
+    - [x] Barra superior de la tabla de resultados: alineados en una sola fila el contador de resultados (`25 de 25 encontrados`), los filtros de tiers (`HOT`, `WARM`, `NURTURE`, `SKIP`), el botón de ordenamiento (`▼ Oportunidad / Triaje (Desc)`) y el enlace `Nueva búsqueda`.
+    - [x] Persistencia de estado para "Plegar filtros": clave `oportunia.radar.filterCollapsed.v1` en `localStorage` para recordar si el panel de filtros quedó plegado o desplegado tras recargas.
+    - [x] Botones de acciones rápidas rediseñados: `📋 + Lista` (azul cielo distintivo) y `💼 + Pipeline` (verde esmeralda distintivo) con iconografía y etiquetas autoexplicativas a simple vista.
+    - [x] Ventana emergente "Agregar a lista" refactorizada con `theme-architect`: cabecera nítida, nombres de lista en alto contraste, badges de estado claros y pie de página `+ Crear nueva lista` con fondo y tipografía de máxima visibilidad en modo claro y oscuro.
+    - [x] Ordenamiento de Rating corregido: los negocios sin reseñas / sin rating (`—` / `null`) se evalúan como 0 estrellas para posicionarse primeritos al ordenar de forma ascendente (menor a mayor: `Sin rating (0)` → `1.0` → `5.0`), y al final al ordenar de forma descendente (`5.0` → `Sin rating`). Desempate secundario por `total_score` para priorizar los mejores prospectos.
+  - [x] Tools (`app/tools/page.tsx`):
+    - [x] Cajas de cuentas/API keys estilizadas con tarjetas limpias `bg-slate-50/80 dark:bg-slate-900/40` con bordes y tipografía de contraste suave.
+    - [x] Badges de estado (Activo, Pausado, Error, etc.).
+  - [x] Servicios (`app/services/page.tsx`):
+    - [x] Títulos en negro/blanco nítido, descripciones en gris legible, badges de tier y cajas de edición.
+  - [x] Listas (`app/lists/page.tsx` y `app/lists/[id]/page.tsx`):
+    - [x] Nombres de listas (`<h3>`), descripciones, fecha de creación, botón eliminar y enlaces de items.
+  - [x] CRM Pipeline (`app/crm/page.tsx`):
+    - [x] Fondo de columnas cambiado de plomo oscuro a `slate-100/70 dark:bg-slate-900/40`.
+    - [x] Cabeceras de etapas con badges de color sutil, tarjetas de prospectos y botones de movimiento.
+    - [x] Bordes de línea perimetrales en cada columna Kanban normalizados (`Lead`, `Contactado`, `Reunión agendada`, `Propuesta enviada`, `Cerrado ganado`, `Cerrado perdido`).
+  - [x] Settings (`app/settings/page.tsx`):
+    - [x] Inputs y textareas con fondo blanco limpio `bg-white dark:bg-slate-900/60` (eliminado el fondo plomo rata/negro).
+    - [x] Botones de selección de LLM y barra de guardado inferior.
+  - [x] Propuestas Comerciales (`app/proposals/[businessId]/page.tsx`):
+    - [x] Diagnóstico 5D, simulador de ROI, cotizador de servicios y catálogo modal en ambos modos.
+- [x] Rediseño integral "Dashboard Layout" anti-genérico (UI UX Pro Max + Theme Architect):
+  - [x] Sidebar vertical fija/plegable `AppSidebar` con secciones "Prospección" y "Herramientas", active pills, perfil de usuario y toggles de tema/idioma.
+  - [x] Top header contextual `DashboardHeader` con breadcrumbs, botones de acción rápida ("Volver al Dashboard", "Nuevo Radar") y drawer móvil.
+  - [x] Contenedor `DashboardShell` integrado en `app/layout.tsx`.
+  - [x] Rediseño de `app/page.tsx` con KPIs métricos, Bento Grid de accesos rápidos y flujo de configuración.
+  - [x] Adaptación de `app/services/page.tsx` fiel a la referencia del usuario (banner descriptivo y tarjetas elevadas).
+  - [x] Adaptación de canvas para todas las vistas (`/radar`, `/crm`, `/lists`, `/tools`, `/settings`, `/proposals/[id]`).
+- [x] Verificación de TypeScript (`npx tsc --noEmit` -> 0 errores).
+- [x] Configuración de acceso remoto vía Tailscale:
+  - [x] Bindeo de Next.js configurado a todas las interfaces (`-H 0.0.0.0`) en `package.json` (`dev` y `start`).
+  - [x] Verificación de IP Tailscale (`100.94.236.105`) y soporte para `tailscale serve`.
+- [x] Regla de ejecución limpia (Zero Dangling Tasks):
+  - [x] Regla global en `C:\Users\Gonzales\.gemini\config\rules\clean-execution.md` y workspace `.agents/rules/clean-execution.md` para forzar cierre de subprocesos y retorno a estado Idle instantáneo.
+- [x] Catálogo de Servicios con Toggles de Activación y Exclusión de Propuestas:
+  - [x] Lógica de backend (`lib/scoring/service-matcher.ts` y `lib/proposals/generator.ts`): los servicios deshabilitados (`active = 0`) se excluyen estrictamente de las recomendaciones para nuevos negocios y del cotizador dinámico.
+  - [x] Toggle switch por Tier en `app/services/page.tsx` para activar o desactivar grupos completos con 1 solo clic.
+  - [x] Botones de estado reactivos en cada tarjeta (`Activo` vs `Deshabilitado`) con badge visual `(Excluido de propuestas)`.
+  - [x] Soporte de batch update en endpoint `PUT /api/services`.
+- [x] Barra de Navegación Principal Unificada en Page Header (`components/layout/dashboard-header.tsx`):
+  - [x] Reemplazo de los títulos estáticos antiguos por la nueva barra de migas de pan (Breadcrumb Pill Bar) con píldora activa `🟢 ACTUAL`.
+  - [x] Flujo de navegación multi-etapa nativo entre `/radar` ⇄ `/radar/[id]` ⇄ `/proposals/[id]`.
+  - [x] Rutas de segundo nivel enlazadas al Dashboard (`/crm`, `/lists`, `/services`, `/tools`, `/settings`).
+  - [x] Botones de acción rápida en la esquina derecha (`[Volver al Dashboard]` y `[Nuevo Radar]`) totalmente preservados.
+  - [x] Auditoría integral del servidor `srvubuntu01` (GPU RTX 5070 Ti, Systemd, Tailscale, Hermes Agent & WebUI).
+  - [x] Ejecución del autocalculador `hermes-vram-calc` en `srvubuntu01` generando el perfil `/home/jagp2026/models/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q2_K_XL.args`.
+  - [x] Documentación técnica maestra creada y enlazada en el Vault de Obsidian: `D:\mcp_servers\obsidian\Jose_Brain\04_Configuraciones_y_MCPs\Servidor_srvubuntu01_Infraestructura_y_Modelos_IA.md`.
+  - [x] Importación, estructuración y categorización completa de todos los manuales de `Hermes_Agent` hacia el Segundo Cerebro de Obsidian (`D:\mcp_servers\obsidian\Jose_Brain`).
+  - [x] Auditoría del VPS de Oracle Cloud (`vnic-jagp` / `100.108.76.104`): Stack n8n, InsForge, PostgreSQL y Cloudflare Tunnel.
+  - [x] Limpieza total y segura de OpenClaw:
+    - [x] Eliminados todos los residuos, crontabs, llaves SSH y directorios de OpenClaw en el VPS de Oracle Cloud.
+    - [x] Eliminado el repositorio de GitHub `ThePipis/OpenClaw` vía API.
+    - [x] Eliminada la carpeta local `D:\Apps\openclawadmin`.
+    - [x] Documentación actualizada en Obsidian: `D:\mcp_servers\obsidian\Jose_Brain\04_Configuraciones_y_MCPs\Servidor_Oracle_Cloud_VPS_Infraestructura_vnic_stack.md`.
+  - [x] Integración de **Agent-Reach (Social Intelligence & Web Eyes)** en la sección Tools & APIs:
+    - [x] Template e inserción en SQLite (`lib/db/seed-tools.ts`).
+    - [x] Endpoint de salud y conectividad (`checkAgentReach` en `lib/tools/health-checks.ts` y `/api/tools/[id]/health`).
+    - [x] Tarjeta de herramienta con badges de canales (Twitter/X, Reddit, YouTube, Web Scraper, Instagram, GitHub), modo $0 API Fees y enlace directo a documentación oficial.
+    - [x] Diálogo de configuración modal con soporte para comandos CLI/MCP y documentación en vivo.
+    - [x] Soporte 100% bilingüe (ES / EN) en diccionarios `lib/i18n/`.
+  - [x] Ajuste y corrección en Tools & APIs:
+    - [x] Brave Search: Ajustada la cuota mensual a 1.000 solicitudes ($5 gratis) en descripción, SQLite (`quota_limit: 1000`) y traducciones bilingües.
+    - [x] Llama.cpp Local Server (GPU): Añadido soporte multi-IP automático (LAN `192.168.1.28`, Tailscale `100.119.37.120`, localhost), detectando el modelo en VRAM `Qwen3.8-27B-UD-Q2_K_XL` con latencia de ~22ms y estado `🟢 Activa`.
+  - [x] Configuración y Verificación del Servidor MCP **Stitch (Google Stitch)**:
+    - [x] Actualizada la API Key en las configuraciones globales de Antigravity (`mcp_config.json`).
+    - [x] Verificado el enlace en vivo con `https://stitch.googleapis.com/mcp` ejecutando `list_projects` con éxito (proyectos listados correctamente).
+  - [x] Enlaces directos a Redes Sociales en **Auditoría Social 360° (Agent-Reach)**:
+    - [x] Añadidos botones y enlaces dinámicos con apertura en nueva pestaña (`target="_blank" rel="noopener noreferrer"`) para Instagram, Facebook, YouTube y menciones en Reddit.
+    - [x] Sincronización i18n completa (`viewProfile`, `viewPage`, `viewChannel`, `viewMentions`).
+    - [x] Estado deshabilitado elegante (`🚫 Sin perfil / canal registrado`) para redes con `Sin Presencia` sin redirección engañosa.
+    - [x] Enlace inteligente de Reddit al subreddit local (`r/InlandEmpire`) o categoría/ciudad para ver discusiones reales.
+  - [x] Corrección de Iconos Duplicados en **Página de Cotizaciones (Proposals)**:
+    - [x] Eliminados emojis duplicados en botones de acción (`Copiar Pitch WhatsApp`, `Descargar Pitch Deck PPTX`, `Descargar Propuesta PDF`).
+    - [x] Ajustados diccionarios i18n (`lib/i18n/es.json` y `en.json`) y componentes en `app/proposals/[businessId]/page.tsx`.
+  - [x] Migas de Pan (Breadcrumb) en **Social Radar**:
+    - [x] Añadida la ruta `/social-radar` en `components/layout/dashboard-header.tsx` mostrando `🏠 Dashboard › 📡 Social Radar › ACTUAL`.
+    - [x] Añadida traducción bilingüe `header.breadcrumbSocialRadar` en `es.json` y `en.json`.
+  - [x] Identificación Visual y URLs en **Social Radar**:
+    - [x] Añadidos componentes SVG oficiales de alta fidelidad:
+      - Icono oficial de **Reddit (Snoo robot blanco en círculo naranja vibrante `#FF4500`)** con badge `Reddit · [subreddit]` resaltante en modo claro y oscuro.
+      - Icono oficial de **Facebook (círculo azul `#1877F2` con logo blanco)** con badge `Facebook Group · [grupo]`.
+      - Logo estilizado de **Twitter / X (`𝕏`)**.
+    - [x] Corregidas las URLs de Reddit hacia búsquedas reales operativas en cada subreddit (`/search/?q=...&restrict_sr=1`), eliminando el error `Internal Server Error`.
+    - [x] Actualizadas las URLs de Twitter / X hacia búsquedas de intención en vivo (`twitter.com/search?q=...&f=live`).
+  - [x] Dirección Completa, Google Maps, Web y Distancia en **Social Radar**:
+    - [x] Cálculo exacto de proximidad (`haversineMiles`) desde tu casa (`7940 Vandewater St, Eastvale, CA 92880`) hacia cada negocio.
+    - [x] Visualización de datos de negocio y autor real (`u/RD_JC07`, `u/Ok-Position8788`, etc.).
+    - [x] **Enlace interactivo a Google Maps** (`🗺️ Maps ↗` y en la dirección) con apertura directa en nueva pestaña (`target="_blank"`).
+    - [x] **Enlace a la Página Web del Negocio** (`🌐 Web ↗`) con apertura en nueva pestaña.
+    - [x] **Enlaces Directos a Hilos Reales de Reddit**: Enlaces `Ver hilo en Reddit ↗` actualizados con los permalinks exactos de hilos reales en Reddit (`/comments/1md74gu/...`), abriendo el post original real con un solo clic.
+    - [x] **Texto Verbatim 1:1 y Enlace a Perfil Reddit**: El fragmento citado y título ahora coinciden 100% palabra por palabra con el post de Reddit en vivo, con botón directo `💬 DM en Reddit` y enlace al perfil del usuario.
+    - [x] Al pulsar **"🚀 Capturar en CRM"**, la empresa se guarda en SQLite con todos sus datos geográficos, teléfono, web y coordenadas para prospección.
+
+## Próximos Pasos Disponibles
+- [ ] Incorporación de nuevas funciones de prospección o integraciones de LLMs adicionales según demanda.

@@ -39,25 +39,39 @@ type I18nContextValue = {
   theme: Theme;
   setTheme: (t: Theme) => void;
   toggleTheme: () => void;
-  t: (key: string, fallback?: string) => string;
+  t: (key: string, params?: Record<string, string | number> | string, fallback?: string) => string;
   available: Locale[];
 };
 
 const I18nContext = React.createContext<I18nContextValue | null>(null);
 
-function resolveKey(dict: Translations, key: string, fallback?: string): string {
+function resolveKey(
+  dict: Translations,
+  key: string,
+  params?: Record<string, string | number> | string,
+  fallback?: string
+): string {
+  const actualFallback = typeof params === "string" ? params : fallback;
+  const actualParams = typeof params === "object" && params !== null ? params : undefined;
+
   const parts = key.split(".");
   let current: any = dict;
   for (const part of parts) {
     if (current == null || typeof current !== "object") {
-      return fallback ?? key;
+      return actualFallback ?? key;
     }
     current = current[part];
   }
   if (current == null || typeof current === "object") {
-    return fallback ?? key;
+    return actualFallback ?? key;
   }
-  return String(current);
+  let text = String(current);
+  if (actualParams) {
+    Object.entries(actualParams).forEach(([k, v]) => {
+      text = text.replace(new RegExp(`\\{${k}\\}`, "g"), String(v));
+    });
+  }
+  return text;
 }
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
@@ -121,8 +135,8 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const t = React.useCallback(
-    (key: string, fallback?: string) => {
-      return resolveKey(translations[locale], key, fallback);
+    (key: string, params?: Record<string, string | number> | string, fallback?: string) => {
+      return resolveKey(translations[locale], key, params, fallback);
     },
     [locale]
   );

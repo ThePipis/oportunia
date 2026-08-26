@@ -19,9 +19,20 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const body = (await request.json()) as { id: string; patch: Partial<NewService> };
+    const body = await request.json();
+    
+    // 1. Batch toggle for an entire tier
+    if (typeof body.tier === "number" && typeof body.active === "boolean") {
+      const { updateTierActive } = await import("@/lib/db/repositories/services");
+      updateTierActive(body.tier, body.active);
+      const { listServices } = await import("@/lib/db/repositories/services");
+      const services = listServices();
+      return NextResponse.json({ success: true, services });
+    }
+
+    // 2. Single service update
     if (!body.id) {
-      return NextResponse.json({ error: "Missing id" }, { status: 400 });
+      return NextResponse.json({ error: "Missing id or tier" }, { status: 400 });
     }
     const { updateService } = await import("@/lib/db/repositories/services");
     const updated = updateService(body.id, body.patch);

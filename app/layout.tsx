@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import "@/components/map/leaflet.css";
 import { I18nProvider } from "@/lib/i18n/client";
-import { TopNav } from "@/components/layout/top-nav";
+import { DashboardShell } from "@/components/layout/dashboard-shell";
 
 export const metadata: Metadata = {
   title: "OportunIA - Radar de Clientes de Alto Valor",
@@ -27,10 +27,10 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
-        {/* FOUC prevention: read theme + locale from localStorage BEFORE React hydrates */}
+        {/* FOUC prevention & Chrome Extension Error Shield (Bitdefender / Anti-trackers) */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('oportunia-theme');var h=document.documentElement;if(t==='light'){h.classList.remove('dark');h.classList.add('light');}else{h.classList.add('dark');}var l=localStorage.getItem('oportunia-locale');if(l==='en'){h.lang='en';}else{h.lang='es';}}catch(e){document.documentElement.classList.add('dark');}})();`,
+            __html: `(function(){try{var t=localStorage.getItem('oportunia-theme');var h=document.documentElement;if(t==='light'){h.classList.remove('dark');h.classList.add('light');}else{h.classList.add('dark');}var l=localStorage.getItem('oportunia-locale');h.lang=(l==='en')?'en':'es';if(typeof window!=='undefined'){var isExt=function(msg,src,stk){var str=((msg||'')+' '+(src||'')+' '+(stk||'')).toLowerCase();return str.indexOf('chrome-extension://')!==-1||str.indexOf('moz-extension://')!==-1||str.indexOf('safari-extension://')!==-1||str.indexOf('eppiocemhmnlbhjplcgkofciiegomcon')!==-1||str.indexOf('m_id')!==-1||str.indexOf('bis_')!==-1||str.indexOf('cz-shortcut')!==-1;};window.addEventListener('error',function(e){var msg=e.message||'';var src=e.filename||'';var stk=(e.error&&e.error.stack)||'';if(isExt(msg,src,stk)){e.preventDefault();e.stopImmediatePropagation();return true;}},true);window.addEventListener('unhandledrejection',function(e){var r=String(e.reason||'');var stk=(e.reason&&e.reason.stack)||'';if(isExt(r,'',stk)){e.preventDefault();e.stopImmediatePropagation();return true;}},true);var origOnErr=window.onerror;window.onerror=function(msg,url,line,col,err){var stk=(err&&err.stack)||'';if(isExt(msg,url,stk))return true;if(origOnErr)return origOnErr.apply(window,arguments);return false;};var origErr=console.error;console.error=function(){for(var i=0;i<arguments.length;i++){var a=arguments[i];var s=(typeof a==='string')?a:(a&&(a.message||a.stack))||'';if(isExt(s,'',''))return;}return origErr.apply(console,arguments);};if(typeof MutationObserver!=='undefined'){var extObs=new MutationObserver(function(muts){for(var i=0;i<muts.length;i++){var m=muts[i];if(m.type==='attributes'&&m.attributeName&&(m.attributeName.indexOf('bis_')===0||m.attributeName==='cz-shortcut-listen')){m.target.removeAttribute(m.attributeName);}}});extObs.observe(document.documentElement,{attributes:true,subtree:true,attributeFilter:['bis_skin_checked','bis_register','cz-shortcut-listen']});}}}catch(e){document.documentElement.classList.add('dark');}})();`,
           }}
         />
         {/* Google Fonts: Inter (UI) + Outfit (display) */}
@@ -45,10 +45,9 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body>
+      <body suppressHydrationWarning>
         <I18nProvider>
-          <TopNav />
-          {children}
+          <DashboardShell>{children}</DashboardShell>
         </I18nProvider>
       </body>
     </html>

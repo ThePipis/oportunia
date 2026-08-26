@@ -36,7 +36,7 @@ export async function POST(
 
   // Classify the error and update account status accordingly
   const cls = classifyError(new Error(result.error ?? "Unknown"));
-  if (cls.kind === "rate_limit" || cls.kind === "transient") {
+  if (cls.kind === "rate_limit") {
     markAccountRateLimited(account.id, cls.message, 300);
   } else if (cls.kind === "permanent") {
     markAccountError(account.id, cls.message);

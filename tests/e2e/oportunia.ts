@@ -18,6 +18,7 @@ import { runMigrations } from "./helpers";
 import { listTools } from "../../lib/db/repositories/tools";
 import { listServices } from "../../lib/db/repositories/services";
 import { calculateScore } from "../../lib/scoring/algorithm";
+import type { ScoringInput } from "../../lib/scoring/algorithm";
 import { matchServices } from "../../lib/scoring/service-matcher";
 import { generateProposal } from "../../lib/proposals/generator";
 
@@ -87,7 +88,7 @@ async function run() {
 
   // 5. Scoring
   console.log("\n5. Scoring algorithm");
-  const hvacInput = {
+  const hvacInput: ScoringInput = {
     digitalSignals: {
       has_chat: false, has_whatsapp: false, has_booking: false,
       has_contact_form: false, has_blog: false, has_testimonials: false,

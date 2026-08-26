@@ -5,7 +5,7 @@
 
 import type { ChatMessage, LLMResponse, LLMRequest } from "./local-client";
 
-const DEFAULT_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.0-pro-exp";
+const DEFAULT_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.1-pro-preview";
 
 interface GeminiRequest {
   contents: Array<{

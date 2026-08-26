@@ -29,6 +29,7 @@
  */
 
 import * as React from "react";
+import { useT } from "@/lib/i18n/client";
 
 export interface StarRatingBreakdownProps {
   /** JSON string with the breakdown. null/undefined → unavailable. */
@@ -114,6 +115,7 @@ export function StarRatingBreakdown({
   businessName,
   city,
 }: StarRatingBreakdownProps) {
+  const { t } = useT();
   const parsed = React.useMemo(() => parseBreakdown(breakdownJson), [breakdownJson]);
 
   // Use the per-level counts as the source of truth for bar widths
@@ -135,7 +137,7 @@ export function StarRatingBreakdown({
       <div className="mt-2 text-[11px] text-slate-500 flex items-start gap-1.5">
         <span aria-hidden="true">ℹ️</span>
         <span>
-          Desglose por estrellas no disponible.{" "}
+          {t("profile.starBreakdownUnavailable", "Desglose por estrellas no disponible.")}{" "}
           {fallbackHref ? (
             <a
               href={fallbackHref}
@@ -143,10 +145,10 @@ export function StarRatingBreakdown({
               rel="noopener noreferrer"
               className="text-sky-400 hover:text-sky-300 underline decoration-dotted"
             >
-              Buscar en Google →
+              {t("common.searchOnGoogle", "Buscar en Google →")}
             </a>
           ) : (
-            "Requiere llamada adicional a Google Places API o Yelp Fusion."
+            t("profile.starBreakdownRequiresCall", "Requiere llamada adicional a Google Places API o Yelp Fusion.")
           )}
         </span>
       </div>

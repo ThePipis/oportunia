@@ -86,6 +86,14 @@ export function getTool(id: string): Tool | null {
   );
 }
 
+export function getToolByName(name: string): Tool | null {
+  const db = getDb();
+  return (
+    (db.prepare(`SELECT * FROM tool_configs WHERE name = ? LIMIT 1`).get(name) as Tool) ??
+    null
+  );
+}
+
 export function createTool(input: NewTool): Tool {
   const db = getDb();
   const id = input.id ?? makeToolId(input.name);

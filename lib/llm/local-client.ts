@@ -1,7 +1,4 @@
-/**
- * Local LLM client (llama.cpp server, OpenAI-compatible API).
- * Default endpoint: http://srvubuntu01:8080
- */
+import { getToolByName } from "@/lib/db/repositories/tools";
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -28,14 +25,65 @@ export interface LLMRequest {
   model?: string;
 }
 
-const DEFAULT_ENDPOINT = process.env.LLM_LOCAL_URL ?? "http://srvubuntu01:8080";
-const DEFAULT_MODEL = process.env.LLM_LOCAL_MODEL ?? "qwen3.5-4b";
+const FALLBACK_ENDPOINT = "http://100.119.37.120:11434";
+
+/** Cache the active model name briefly to avoid querying /v1/models on every prompt */
+let cachedActiveModel: { name: string; endpoint: string; expiresAt: number } | null = null;
+
+export async function getActiveLlamaModel(endpointUrl: string): Promise<string> {
+  const now = Date.now();
+  if (
+    cachedActiveModel &&
+    cachedActiveModel.endpoint === endpointUrl &&
+    cachedActiveModel.expiresAt > now
+  ) {
+    return cachedActiveModel.name;
+  }
+
+  try {
+    const res = await fetch(`${endpointUrl}/v1/models`, {
+      method: "GET",
+      signal: AbortSignal.timeout(4000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const detected =
+        data.models?.[0]?.name ||
+        data.models?.[0]?.model ||
+        data.data?.[0]?.id;
+      if (detected) {
+        cachedActiveModel = {
+          name: detected,
+          endpoint: endpointUrl,
+          expiresAt: now + 30000, // cache 30s
+        };
+        return detected;
+      }
+    }
+  } catch (e: any) {
+    console.warn(`[local-client] Failed to detect active llama model: ${e.message}`);
+  }
+
+  return "default";
+}
 
 export async function callLocalLLM(
   request: LLMRequest
 ): Promise<LLMResponse> {
-  const endpoint = (request.endpoint ?? DEFAULT_ENDPOINT).replace(/\/+$/, "");
-  const model = request.model ?? DEFAULT_MODEL;
+  // Resolve endpoint dynamically from DB tool configuration or environment
+  let endpoint = request.endpoint;
+  if (!endpoint) {
+    const tool = getToolByName("llama-local");
+    endpoint = tool?.endpoint || process.env.LLM_LOCAL_URL || FALLBACK_ENDPOINT;
+  }
+  endpoint = endpoint.replace(/\/+$/, "");
+
+  // Auto-detect active model if not explicitly specified
+  let model = request.model;
+  if (!model || model === "auto" || model === "default") {
+    model = await getActiveLlamaModel(endpoint);
+  }
+
   const start = Date.now();
 
   const body: Record<string, unknown> = {

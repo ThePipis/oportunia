@@ -122,15 +122,15 @@ test("Small restaurant, far away, no digital gap → skip tier", () => {
   assert(score.breakdown.proximidad <= 30, `proximidad is low (got ${score.breakdown.proximidad})`);
 });
 
-test("scoreProximidadDim: 3mi = 100, 20mi = 50, 60mi = 5", () => {
+test("scoreProximidadDim: 3mi = 100, 20mi = 45, 60mi = 20", () => {
   assert(scoreProximidadDim(3).score === 100, "3mi → 100");
-  assert(scoreProximidadDim(20).score === 50, "20mi → 50");
-  assert(scoreProximidadDim(60).score === 5, "60mi → 5");
+  assert(scoreProximidadDim(20).score === 45, "20mi → 45");
+  assert(scoreProximidadDim(60).score === 20, "60mi → 20");
   assert(scoreProximidadDim(null).score === 50, "null → 50 (neutral)");
 });
 
 test("scoreBrechaDigitalDim: minimal signals = high score", () => {
-  const signals: DigitalSignals = {
+  const signals: Partial<DigitalSignals> = {
     has_chat: false,
     has_whatsapp: false,
     has_booking: false,
@@ -171,7 +171,7 @@ test("scoreBrechaDigitalDim: minimal signals = high score", () => {
 });
 
 test("scoreGapOperativoDim: no phone + no 24/7 = high gap", () => {
-  const signals: DigitalSignals = {
+  const signals: Partial<DigitalSignals> = {
     has_chat: false, has_whatsapp: false, has_booking: false,
     has_contact_form: false, has_blog: false, has_testimonials: false,
     mentions_24_7: false, has_phone: true, has_email: true, has_address: true,

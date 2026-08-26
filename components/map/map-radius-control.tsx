@@ -19,6 +19,7 @@
  */
 
 import * as React from "react";
+import { useT } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 
 interface MapRadiusControlProps {
@@ -45,6 +46,7 @@ export default function MapRadiusControl({
   max = 30,
   className,
 }: MapRadiusControlProps) {
+  const { t } = useT();
   const [unit, setUnit] = React.useState<Unit>("mi");
 
   const metersToDisplay = (m: number) =>
@@ -87,12 +89,12 @@ export default function MapRadiusControl({
         className
       )}
       role="group"
-      aria-label="Radio de búsqueda"
+      aria-label={t("radar.radiusLabel", "Radio")}
     >
       {/* Header row: label + value + unit toggle */}
       <div className="flex items-center justify-between gap-1">
         <span className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400 font-semibold flex items-center gap-1">
-          <span aria-hidden="true">📏</span> Radio
+          <span aria-hidden="true">📏</span> {t("radar.radiusLabel", "Radio")}
         </span>
         <div className="flex items-center gap-1.5">
           <span
