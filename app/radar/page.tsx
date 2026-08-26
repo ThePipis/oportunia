@@ -8,6 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import LocationSearch from "@/components/map/location-search";
 import CategoryMultiSelect from "@/components/map/category-multi-select";
 import IconAction from "@/components/map/icon-action";
@@ -36,6 +44,7 @@ interface SearchResponse {
   results: SearchResult[];
   saved: number;
   total_found: number;
+  omitted_in_lists?: number;
   error?: string;
 }
 
@@ -462,6 +471,160 @@ function getBusinessCategory(
       });
   }, [hydrated]);
 
+  // ───────── Multi-Select & Batch Actions State ─────────
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
+  const [excludeSavedInLists, setExcludeSavedInLists] = React.useState<boolean>(true);
+  const [omittedInListsCount, setOmittedInListsCount] = React.useState<number>(0);
+
+  // Send to list dialog state
+  const [isListModalOpen, setIsListModalOpen] = React.useState<boolean>(false);
+  const [availableLists, setAvailableLists] = React.useState<Array<{ id: string; name: string; color: string; description: string | null }>>([]);
+  const [loadingLists, setLoadingLists] = React.useState<boolean>(false);
+  const [targetListId, setTargetListId] = React.useState<string>("");
+  const [isCreatingInlineList, setIsCreatingInlineList] = React.useState<boolean>(false);
+  const [newListName, setNewListName] = React.useState<string>("");
+  const [newListColor, setNewListColor] = React.useState<string>("sky");
+  const [batchActionLoading, setBatchActionLoading] = React.useState<boolean>(false);
+  const [batchSuccessMsg, setBatchSuccessMsg] = React.useState<string | null>(null);
+
+  // Multi-select handlers
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllFiltered = () => {
+    setSelectedIds(new Set(filteredResults.map((r) => r.id)));
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+  };
+
+  // Open list modal & fetch lists
+  const openSendToListModal = async () => {
+    if (selectedIds.size === 0) return;
+    setIsListModalOpen(true);
+    setLoadingLists(true);
+    try {
+      const res = await fetch("/api/lists");
+      const data = await res.json();
+      const lists = data.lists ?? [];
+      setAvailableLists(lists);
+      if (lists.length > 0 && !targetListId) {
+        setTargetListId(lists[0].id);
+      }
+    } catch (err) {
+      console.error("Failed to load lists:", err);
+    } finally {
+      setLoadingLists(false);
+    }
+  };
+
+  // Submit batch add to list
+  const handleBatchAddToList = async () => {
+    let finalTargetListId = targetListId;
+
+    if (isCreatingInlineList) {
+      if (!newListName.trim()) return;
+      setBatchActionLoading(true);
+      try {
+        const createRes = await fetch("/api/lists", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: newListName.trim(), color: newListColor }),
+        });
+        const createData = await createRes.json();
+        if (!createRes.ok || !createData.list) {
+          throw new Error(createData.error || "Error al crear la lista");
+        }
+        finalTargetListId = createData.list.id;
+        setAvailableLists((prev) => [createData.list, ...prev]);
+        setTargetListId(createData.list.id);
+        setIsCreatingInlineList(false);
+        setNewListName("");
+      } catch (err: any) {
+        setError(err.message || "Error al crear lista");
+        setBatchActionLoading(false);
+        return;
+      }
+    }
+
+    if (!finalTargetListId) return;
+
+    setBatchActionLoading(true);
+    try {
+      const businessIds = Array.from(selectedIds);
+      const res = await fetch(`/api/lists/${finalTargetListId}/items/batch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessIds }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Error al agregar a la lista");
+      }
+
+      const count = data.addedCount ?? businessIds.length;
+      const targetListObj = availableLists.find((l) => l.id === finalTargetListId);
+      const listName = targetListObj ? targetListObj.name : data.listName || "Lista";
+      setBatchSuccessMsg(`✅ ${count} negocios agregados a "${listName}"`);
+
+      // If excludeSavedInLists is active, remove saved items from current radar results
+      if (excludeSavedInLists) {
+        const idSet = new Set(businessIds);
+        const remaining = results.filter((r) => !idSet.has(r.id));
+        update({
+          results: remaining,
+          totalFound: remaining.length,
+        });
+        setOmittedInListsCount((prev) => prev + count);
+      }
+
+      setSelectedIds(new Set());
+      setIsListModalOpen(false);
+
+      setTimeout(() => {
+        setBatchSuccessMsg(null);
+      }, 4000);
+    } catch (err: any) {
+      setError(err.message || "Error en guardado masivo");
+    } finally {
+      setBatchActionLoading(false);
+    }
+  };
+
+  // Submit batch add to CRM
+  const handleBatchAddToCrm = async () => {
+    if (selectedIds.size === 0) return;
+    setBatchActionLoading(true);
+    try {
+      const business_ids = Array.from(selectedIds);
+      const res = await fetch("/api/crm/move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ business_ids, stage: "lead" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al mover al CRM");
+
+      setBatchSuccessMsg(`🚀 ${data.movedCount ?? business_ids.length} negocios agregados al Pipeline CRM como Nuevos Leads`);
+      setSelectedIds(new Set());
+
+      setTimeout(() => {
+        setBatchSuccessMsg(null);
+      }, 4000);
+    } catch (err: any) {
+      setError(err.message || "Error al mover al CRM");
+    } finally {
+      setBatchActionLoading(false);
+    }
+  };
+
   const handleSort = React.useCallback(
     (column: SortKey) => {
       if (sortBy === column) {
@@ -525,6 +688,7 @@ function getBusinessCategory(
     searchAbortRef.current = controller;
     setLoading(true);
     setError(null);
+    setSelectedIds(new Set());
     update({ searched: true, selectedBusinessId: null });
 
     try {
@@ -539,6 +703,7 @@ function getBusinessCategory(
           origin,
           radiusMiles,
           maxResults,
+          excludeSavedInLists,
         }),
       });
 
@@ -546,11 +711,13 @@ function getBusinessCategory(
       if (!res.ok) {
         setError(data.error ?? `Error ${res.status}`);
         update({ results: [], totalFound: 0 });
+        setOmittedInListsCount(0);
       } else {
         update({
           results: data.results ?? [],
           totalFound: data.total_found ?? 0,
         });
+        setOmittedInListsCount(data.omitted_in_lists ?? 0);
         if (data.error) setError(data.error);
         if (data.results?.length === 0 && (data as any).message) {
           setError((data as any).message);
@@ -1131,6 +1298,33 @@ function getBusinessCategory(
                             {t("radar.viewAll", "✕ Ver todos")}
                           </button>
                         )}
+
+                        <span className="text-slate-300 dark:text-slate-700 select-none">·</span>
+
+                        {/* List Exclusion Filter Toggle */}
+                        <label
+                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10.5px] font-bold transition-all select-none whitespace-nowrap cursor-pointer ${
+                            excludeSavedInLists
+                              ? "bg-slate-100 dark:bg-slate-800 border border-sky-500/50 text-sky-800 dark:text-sky-300 shadow-2xs"
+                              : "bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400"
+                          }`}
+                          title="Excluir de la búsqueda negocios que ya guardaste en cualquiera de tus listas para ahorrar llamadas a la API y prospectar solo leads nuevos"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={excludeSavedInLists}
+                            onChange={(e) => {
+                              setExcludeSavedInLists(e.target.checked);
+                            }}
+                            className="w-3 h-3 rounded border-slate-300 dark:border-slate-700 text-sky-600 focus:ring-sky-500 cursor-pointer accent-sky-500"
+                          />
+                          <span>🚫 Ocultar en listas</span>
+                          {omittedInListsCount > 0 && (
+                            <span className="font-mono text-[9.5px] px-1 py-0.2 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 font-normal">
+                              ({omittedInListsCount} omitidos)
+                            </span>
+                          )}
+                        </label>
                       </div>
                     </div>
 
@@ -1155,21 +1349,65 @@ function getBusinessCategory(
                     </div>
                   </div>
 
+                  {/* Batch Success Message Banner */}
+                  {batchSuccessMsg && (
+                    <div className="mb-2 p-2 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center justify-between animate-in fade-in duration-150 shrink-0">
+                      <div className="flex items-center gap-2">
+                        <span>{batchSuccessMsg}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setBatchSuccessMsg(null)}
+                        className="text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-200 text-sm leading-none"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+
                   {/* Wide results table with expandable row drawers */}
                   <div className="overflow-y-auto overflow-x-auto rounded-lg border border-slate-200 dark:border-white/5 flex-1 min-h-0 bg-white dark:bg-slate-950/40 relative">
                     <table className="w-full text-sm table-fixed">
                       <colgroup>
-                        <col className="w-[24%] min-w-[140px]" />
-                        <col className="w-[20%] min-w-[130px]" />
-                        <col className="w-[14%] min-w-[95px]" />
-                        <col className="w-[98px]" />
-                        <col className="w-[108px]" />
-                        <col className="w-[80px]" />
-                        <col className="w-[64px]" />
+                        <col className="w-[36px]" />
+                        <col className="w-[23%] min-w-[130px]" />
+                        <col className="w-[19%] min-w-[120px]" />
+                        <col className="w-[13%] min-w-[90px]" />
+                        <col className="w-[92px]" />
+                        <col className="w-[104px]" />
+                        <col className="w-[78px]" />
+                        <col className="w-[60px]" />
                         <col className="w-[88px]" />
                       </colgroup>
                       <thead className="sticky top-0 z-20 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-xs text-[11px] uppercase tracking-wide text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-white/10 shadow-2xs">
                         <tr>
+                          {/* 0. Master Checkbox */}
+                          <th className="sticky top-0 z-30 bg-slate-100 dark:bg-slate-900 text-center py-2 px-1 w-[36px] border-b border-slate-200 dark:border-white/10">
+                            <input
+                              type="checkbox"
+                              checked={
+                                paginatedResults.length > 0 &&
+                                paginatedResults.every((r) => selectedIds.has(r.id))
+                              }
+                              onChange={() => {
+                                const allSelected =
+                                  paginatedResults.length > 0 &&
+                                  paginatedResults.every((r) => selectedIds.has(r.id));
+                                setSelectedIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (allSelected) {
+                                    paginatedResults.forEach((r) => next.delete(r.id));
+                                  } else {
+                                    paginatedResults.forEach((r) => next.add(r.id));
+                                  }
+                                  return next;
+                                });
+                              }}
+                              className="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-700 text-sky-600 focus:ring-sky-500 cursor-pointer accent-sky-500"
+                              title="Seleccionar / Deseleccionar todos en esta página"
+                              aria-label="Seleccionar todos en esta página"
+                            />
+                          </th>
                           {/* Negocio */}
                           <SortableHeader
                             column="name"
@@ -1177,7 +1415,7 @@ function getBusinessCategory(
                             sortBy={sortBy}
                             sortDir={sortDir}
                             onSort={handleSort}
-                            className="text-left pl-3 pr-2 w-[24%]"
+                            className="text-left pl-2 pr-2 w-[23%]"
                           />
                           {/* Categoría */}
                           <SortableHeader
@@ -1186,7 +1424,7 @@ function getBusinessCategory(
                             sortBy={sortBy}
                             sortDir={sortDir}
                             onSort={handleSort}
-                            className="text-left px-2 w-[20%]"
+                            className="text-left px-2 w-[19%]"
                           />
                           {/* Ciudad */}
                           <SortableHeader
@@ -1195,7 +1433,7 @@ function getBusinessCategory(
                             sortBy={sortBy}
                             sortDir={sortDir}
                             onSort={handleSort}
-                            className="text-left px-2 w-[14%]"
+                            className="text-left px-2 w-[13%]"
                           />
                           {/* Score */}
                           <SortableHeader
@@ -1204,7 +1442,7 @@ function getBusinessCategory(
                             sortBy={sortBy}
                             sortDir={sortDir}
                             onSort={handleSort}
-                            className="text-left px-1.5 w-[98px]"
+                            className="text-left px-1.5 w-[92px]"
                           />
                           {/* Servicios IA */}
                           <SortableHeader
@@ -1213,7 +1451,7 @@ function getBusinessCategory(
                             sortBy={sortBy}
                             sortDir={sortDir}
                             onSort={handleSort}
-                            className="text-center px-1.5 w-[108px]"
+                            className="text-center px-1.5 w-[104px]"
                           />
                           {/* Rating */}
                           <SortableHeader
@@ -1222,7 +1460,7 @@ function getBusinessCategory(
                             sortBy={sortBy}
                             sortDir={sortDir}
                             onSort={handleSort}
-                            className="text-center px-1 w-[80px]"
+                            className="text-center px-1 w-[78px]"
                           />
                           {/* Dist */}
                           <SortableHeader
@@ -1231,7 +1469,7 @@ function getBusinessCategory(
                             sortBy={sortBy}
                             sortDir={sortDir}
                             onSort={handleSort}
-                            className="text-right px-1.5 w-[64px]"
+                            className="text-right px-1.5 w-[60px]"
                           />
                           {/* Acción */}
                           <th className="sticky top-0 z-30 bg-slate-100 dark:bg-slate-900 text-right font-semibold py-2 pl-1.5 pr-2.5 whitespace-nowrap w-[88px] text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-white/10">
@@ -1243,6 +1481,7 @@ function getBusinessCategory(
                         {paginatedResults.map((r) => {
                           const isSelected = r.id === effectiveSelectedId;
                           const isExpanded = expandedRowId === r.id;
+                          const isChecked = selectedIds.has(r.id);
                           const mapsHref = r.lat != null && r.lng != null
                             ? `https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lng}`
                             : null;
@@ -1257,15 +1496,31 @@ function getBusinessCategory(
                                   setFocusTick(Date.now());
                                 }}
                                 className={`border-b border-slate-100 dark:border-white/5 transition-all cursor-pointer ${
-                                  isSelected
+                                  isChecked
+                                    ? "bg-sky-500/10 dark:bg-sky-500/15 border-l-4 border-l-sky-500"
+                                    : isSelected
                                     ? "bg-orange-500/15 border-l-4 border-l-orange-500 dark:bg-orange-500/20"
                                     : isExpanded
                                     ? "bg-slate-50/90 dark:bg-slate-800/60 border-l-4 border-l-sky-500"
                                     : "hover:bg-slate-50 dark:hover:bg-slate-800/40"
                                 }`}
                               >
+                                {/* 0. Checkbox Individual */}
+                                <td
+                                  className="py-1.5 px-1 text-center align-middle"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => toggleSelect(r.id)}
+                                    className="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-700 text-sky-600 focus:ring-sky-500 cursor-pointer accent-sky-500"
+                                    aria-label={`Seleccionar ${r.name}`}
+                                  />
+                                </td>
+
                                 {/* 1. Negocio con toggle expandible */}
-                                <td className="py-1.5 pl-3 pr-2 align-middle">
+                                <td className="py-1.5 pl-2 pr-2 align-middle">
                                   <div className="flex items-center gap-1.5 min-w-0">
                                     <button
                                       type="button"
@@ -1458,7 +1713,7 @@ function getBusinessCategory(
                               {/* Expandable Details Drawer */}
                               {isExpanded && (
                                 <tr className="bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200 dark:border-white/10 animate-in fade-in-50 duration-150">
-                                  <td colSpan={8} className="p-3 pl-8">
+                                  <td colSpan={9} className="p-3 pl-8">
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 rounded-lg bg-white dark:bg-slate-950/80 border border-slate-200/80 dark:border-white/10 shadow-xs">
                                       {/* 1. Ubicación y Dirección */}
                                       <div className="space-y-1.5 text-xs flex flex-col justify-between">
@@ -1494,7 +1749,12 @@ function getBusinessCategory(
                                           {r.phone ? (
                                             <div className="flex items-center gap-1.5">
                                               <span className="text-slate-500 dark:text-slate-400 font-medium">{t("radar.phoneLabel", "Teléfono:")}</span>
-                                              <ClickToCopyPhone phone={r.phone} />
+                                              <a
+                                                href={`tel:${r.phone}`}
+                                                className="text-sky-600 dark:text-sky-400 hover:underline font-mono"
+                                              >
+                                                {r.phone}
+                                              </a>
                                             </div>
                                           ) : (
                                             <div className="flex items-center gap-1.5">
@@ -1553,6 +1813,64 @@ function getBusinessCategory(
                       </tbody>
                     </table>
                   </div>
+
+                  {/* Floating Sticky Bulk Actions Bar */}
+                  {selectedIds.size > 0 && (
+                    <div className="my-1.5 p-2 rounded-xl bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-md border border-sky-500/40 text-white shadow-lg shadow-sky-950/20 flex items-center justify-between gap-2 flex-wrap shrink-0 animate-in fade-in slide-in-from-bottom-2 duration-150">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-2 w-2 relative">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-500"></span>
+                        </span>
+                        <span className="text-xs font-semibold">
+                          <strong className="text-sky-400 font-mono text-sm">{selectedIds.size}</strong>{" "}
+                          {selectedIds.size === 1 ? "negocio seleccionado" : "negocios seleccionados"}
+                        </span>
+                        {selectedIds.size < filteredResults.length && (
+                          <button
+                            type="button"
+                            onClick={selectAllFiltered}
+                            className="text-[11px] text-sky-400 hover:text-sky-300 underline font-medium ml-1"
+                          >
+                            Seleccionar los {filteredResults.length} filtrados
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={openSendToListModal}
+                          disabled={batchActionLoading}
+                          className="bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs h-7 px-3 shadow-xs shadow-sky-600/30 flex items-center gap-1.5"
+                        >
+                          <span>📁</span>
+                          <span>Enviar a Lista...</span>
+                        </Button>
+
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleBatchAddToCrm}
+                          disabled={batchActionLoading}
+                          className="bg-emerald-600 hover:emerald-500 text-white font-bold text-xs h-7 px-3 shadow-xs shadow-emerald-600/30 flex items-center gap-1.5"
+                        >
+                          <span>🚀</span>
+                          <span>Al Pipeline CRM</span>
+                        </Button>
+
+                        <button
+                          type="button"
+                          onClick={clearSelection}
+                          className="text-xs text-slate-400 hover:text-white px-2 py-1 rounded transition-colors"
+                          title="Deseleccionar todos"
+                        >
+                          ✕ Limpiar
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Pagination footer */}
                   <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-200 dark:border-white/5 flex-wrap gap-2 shrink-0">
@@ -1681,6 +1999,179 @@ function getBusinessCategory(
             )}
           </div>
         </div>
+
+        {/* Modal Dialog para Enviar Masivamente a Lista */}
+        <Dialog open={isListModalOpen} onOpenChange={setIsListModalOpen}>
+          <DialogContent className="sm:max-w-md bg-white dark:bg-slate-900 border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100">
+            <DialogHeader>
+              <DialogTitle className="text-base font-bold flex items-center gap-2">
+                <span>📁</span>
+                <span>Guardar {selectedIds.size} negocios en una Lista</span>
+              </DialogTitle>
+              <DialogDescription className="text-xs text-slate-500 dark:text-slate-400">
+                Selecciona una lista existente o crea una nueva. Los negocios se guardarán de forma persistente en SQLite y podrás gestionarlos en la sección de Listas.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3 py-2">
+              {loadingLists ? (
+                <div className="py-6 text-center text-xs text-slate-400">
+                  <div className="inline-block w-5 h-5 border-2 border-sky-400 border-t-transparent rounded-full animate-spin mb-2" />
+                  <p>Cargando tus listas...</p>
+                </div>
+              ) : isCreatingInlineList ? (
+                <div className="space-y-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-white/10">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Nombre de la nueva lista
+                    </label>
+                    <Input
+                      placeholder="Ej. Dentistas Alta Prioridad Corona"
+                      value={newListName}
+                      onChange={(e) => setNewListName(e.target.value)}
+                      className="h-8 text-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Color de identificación
+                    </label>
+                    <div className="flex items-center gap-2">
+                      {[
+                        { id: "sky", bg: "bg-sky-500" },
+                        { id: "emerald", bg: "bg-emerald-500" },
+                        { id: "amber", bg: "bg-amber-500" },
+                        { id: "rose", bg: "bg-rose-500" },
+                        { id: "purple", bg: "bg-purple-500" },
+                        { id: "indigo", bg: "bg-indigo-500" },
+                      ].map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setNewListColor(c.id)}
+                          className={`w-6 h-6 rounded-full ${c.bg} transition-all ${
+                            newListColor === c.id
+                              ? "ring-2 ring-offset-2 ring-slate-900 dark:ring-white scale-110"
+                              : "opacity-70 hover:opacity-100"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsCreatingInlineList(false)}
+                      className="h-7 text-xs"
+                    >
+                      Volver a listas existentes
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Elige una lista de destino:
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsCreatingInlineList(true)}
+                      className="text-xs font-bold text-sky-600 dark:text-sky-400 hover:underline"
+                    >
+                      + Crear nueva lista
+                    </button>
+                  </div>
+
+                  {availableLists.length === 0 ? (
+                    <div className="p-4 text-center border border-dashed border-slate-300 dark:border-slate-700 rounded-lg">
+                      <p className="text-xs text-slate-500 mb-2">No tienes ninguna lista creada todavía.</p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => setIsCreatingInlineList(true)}
+                        className="text-xs h-7 bg-sky-600 hover:bg-sky-500 text-white font-semibold"
+                      >
+                        + Crear mi primera lista
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="max-h-[220px] overflow-y-auto space-y-1.5 pr-1">
+                      {availableLists.map((list) => {
+                        const isSelected = targetListId === list.id;
+                        return (
+                          <label
+                            key={list.id}
+                            className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition-all ${
+                              isSelected
+                                ? "bg-sky-50 dark:bg-sky-500/15 border-sky-500 text-sky-900 dark:text-sky-200 shadow-xs"
+                                : "bg-slate-50/60 dark:bg-slate-800/40 border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-slate-600 text-slate-800 dark:text-slate-200"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <input
+                                type="radio"
+                                name="target_list"
+                                value={list.id}
+                                checked={isSelected}
+                                onChange={() => setTargetListId(list.id)}
+                                className="w-3.5 h-3.5 text-sky-600 focus:ring-sky-500 cursor-pointer accent-sky-500"
+                              />
+                              <span className="w-2.5 h-2.5 rounded-full bg-sky-500 shrink-0" />
+                              <span className="font-semibold text-xs">{list.name}</span>
+                            </div>
+                            {list.description && (
+                              <span className="text-[11px] text-slate-400 truncate max-w-[140px]">
+                                {list.description}
+                              </span>
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="flex items-center justify-between gap-2 border-t border-slate-100 dark:border-white/5 pt-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsListModalOpen(false)}
+                disabled={batchActionLoading}
+                className="text-xs h-8"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleBatchAddToList}
+                disabled={
+                  batchActionLoading ||
+                  (isCreatingInlineList ? !newListName.trim() : !targetListId)
+                }
+                className="bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs h-8 px-4 shadow-sm shadow-sky-600/30"
+              >
+                {batchActionLoading ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5" />
+                    <span>Guardando...</span>
+                  </>
+                ) : (
+                  <span>Guardar {selectedIds.size} negocios</span>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
   );
 }

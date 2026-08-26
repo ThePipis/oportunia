@@ -123,5 +123,13 @@
     - [x] **Protección de SKU Enterprise**: `placeDetails` se acotó estrictamente a demanda y sin campos caros de Atmosphere (`reviews`, `photos`), derivando el análisis cualitativo a fuentes gratuitas (Yelp Fusion, Brave, Tavily).
     - [x] **Documentación Obligatoria `GEMINI.md`**: Creado el archivo `GEMINI.md` y `.agents/rules/google-places-cost-governance.md` con las 6 reglas cardinales para garantizar operación 100% en Free Tier en todo desarrollo futuro.
 
+  - [x] **Selección Múltiple en Tabla del Radar y Guardado Masivo en Listas**:
+    - [x] **Checkboxes Reactivos**: Master checkbox en cabecera de la tabla y checkboxes individuales por cada fila de negocio en `app/radar/page.tsx`.
+    - [x] **Barra Flotante de Acciones Masivas**: Visualización contextual al seleccionar 1 o más negocios (`N negocios seleccionados`, `📁 Enviar a Lista...`, `🚀 Al Pipeline CRM`, `✕ Limpiar`).
+    - [x] **Modal Dialog Interactivo de Listas**: Permite seleccionar una lista existente de SQLite o crear una nueva lista inline con nombre y color personalizado.
+    - [x] **Backend Atómico de Inserción Masiva**: Endpoint `POST /api/lists/[id]/items/batch` con transacción SQLite y función `addBatchToList`.
+    - [x] **Filtro Inteligente de Exclusión (`🚫 Ocultar en listas`)**: Omite de las búsquedas los negocios que ya se guardaron en cualquiera de tus listas, ahorrando llamadas a la API y prospectando únicamente leads nuevos.
+    - [x] **Corrección de Scripts de Producción (`prod-loop.ps1` / `prod-loop.cmd`)**: Actualizada la validación para verificar `.next\BUILD_ID` y autocompilar si se ejecutó en dev mode.
+
 ## Próximos Pasos Disponibles
 - [ ] Incorporación de nuevas funciones de prospección o integraciones de LLMs adicionales según demanda.

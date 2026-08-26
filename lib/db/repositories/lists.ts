@@ -92,6 +92,60 @@ export function isBusinessInList(listId: string, businessId: string): boolean {
   return !!row;
 }
 
+export function addBatchToList(listId: string, businessIds: string[]): { addedCount: number } {
+  if (businessIds.length === 0) return { addedCount: 0 };
+  const db = getDb();
+  const now = Math.floor(Date.now() / 1000);
+  let maxPos =
+    (db.prepare(`SELECT MAX(position) as m FROM list_items WHERE list_id = ?`).get(listId) as {
+      m: number | null;
+    })?.m ?? 0;
+
+  let addedCount = 0;
+  const insertStmt = db.prepare(
+    `INSERT OR IGNORE INTO list_items (list_id, business_id, position, notes, added_at) VALUES (?, ?, ?, NULL, ?)`
+  );
+
+  const runTransaction = db.transaction((ids: string[]) => {
+    for (const bizId of ids) {
+      maxPos++;
+      const res = insertStmt.run(listId, bizId, maxPos, now);
+      if (res.changes > 0) addedCount++;
+    }
+  });
+
+  runTransaction(businessIds);
+  return { addedCount };
+}
+
+/**
+ * Returns a set of all google_place_ids that currently exist in at least one saved list.
+ * Used by Radar search to skip/exclude businesses already saved in lists.
+ */
+export function getSavedListGooglePlaceIds(): Set<string> {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT b.google_place_id 
+       FROM list_items li
+       JOIN businesses b ON b.id = li.business_id
+       WHERE b.google_place_id IS NOT NULL`
+    )
+    .all() as { google_place_id: string }[];
+  return new Set(rows.map((r) => r.google_place_id));
+}
+
+/**
+ * Returns a set of all business_ids that currently exist in at least one saved list.
+ */
+export function getSavedListBusinessIds(): Set<string> {
+  const db = getDb();
+  const rows = db
+    .prepare(`SELECT DISTINCT business_id FROM list_items`)
+    .all() as { business_id: string }[];
+  return new Set(rows.map((r) => r.business_id));
+}
+
 export function getListItems(listId: string): Array<ListItem & { business_name: string; address: string | null; city: string | null; total_score: number | null; tier: string | null }> {
   const db = getDb();
   return db.prepare(
@@ -104,3 +158,4 @@ export function getListItems(listId: string): Array<ListItem & { business_name: 
      ORDER BY li.position ASC, li.added_at DESC`
   ).all(listId) as any[];
 }
+

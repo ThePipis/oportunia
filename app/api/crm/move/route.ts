@@ -80,6 +80,32 @@ function rescoreBusinessSync(businessId: string): void {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+
+    // Batch support
+    if (Array.isArray(body?.business_ids) && body.business_ids.length > 0) {
+      const stage = (body.stage || "lead") as PipelineStage;
+      if (!VALID_STAGES.includes(stage)) {
+        return NextResponse.json({ error: `Invalid stage. Must be one of: ${VALID_STAGES.join(", ")}` }, { status: 400 });
+      }
+
+      let movedCount = 0;
+      for (const bId of body.business_ids) {
+        try {
+          createActivity({
+            business_id: bId,
+            type: "status_change",
+            title: `Movido a: ${STAGE_LABELS[stage] || stage}`,
+            pipeline_stage: stage,
+            status: "completed",
+          });
+          movedCount++;
+        } catch {
+          // ignore single item errors in batch
+        }
+      }
+      return NextResponse.json({ ok: true, movedCount, stage });
+    }
+
     const { business_id, stage } = body as { business_id: string; stage: string };
     if (!business_id || !stage) {
       return NextResponse.json({ error: "Missing business_id or stage" }, { status: 400 });

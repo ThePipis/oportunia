@@ -27,6 +27,7 @@ import {
   getCategoryById,
   incrementUsageBatch,
 } from "@/lib/db/repositories/categories";
+import { getSavedListGooglePlaceIds } from "@/lib/db/repositories/lists";
 import { runDeepScoringPipeline } from "@/lib/scoring/pipeline";
 
 interface SearchRequest {
@@ -42,6 +43,8 @@ interface SearchRequest {
   radiusMiles?: number;
   /** Optional cap on results. If null/undefined, returns all found places. */
   maxResults?: number | null;
+  /** Exclude businesses already saved in lists (default: true) */
+  excludeSavedInLists?: boolean;
 }
 
 function extractCleanCity(fullLocation: string): string {
@@ -123,6 +126,9 @@ export async function POST(request: NextRequest) {
     const radiusMiles = body.radiusMiles ?? 5;
     const isLimited = typeof body.maxResults === "number" && body.maxResults > 0;
     const maxResults = isLimited ? (body.maxResults as number) : null;
+    const excludeSavedInLists = body.excludeSavedInLists !== false;
+    const savedListPlaceIds = excludeSavedInLists ? getSavedListGooglePlaceIds() : new Set<string>();
+    let omittedSavedInListCount = 0;
 
     // Build strict location restriction based on center origin and radius
     let locationRestriction: { latitude: number; longitude: number; radiusMeters: number } | undefined;
@@ -169,6 +175,12 @@ export async function POST(request: NextRequest) {
       if (r.value.usedAccountId) accountsUsed.add(r.value.usedAccountId);
       for (const place of r.value.data) {
         if (seen.has(place.id)) continue;
+
+        // Omit businesses that are already saved in user's lists
+        if (excludeSavedInLists && savedListPlaceIds.has(place.id)) {
+          omittedSavedInListCount++;
+          continue;
+        }
 
         // Dual Mode Boundary Filter:
         // 1. If searching a city, businesses whose address explicitly matches the target city are ALWAYS included.
@@ -218,8 +230,12 @@ export async function POST(request: NextRequest) {
         results: [],
         saved: 0,
         total_found: 0,
+        omitted_in_lists: omittedSavedInListCount,
         used_accounts: [...accountsUsed],
-        message: "No se encontraron negocios dentro del área especificada. Probá ampliando el radio de búsqueda.",
+        message:
+          omittedSavedInListCount > 0
+            ? `Se omitieron ${omittedSavedInListCount} negocios porque ya están guardados en tus listas. Desactiva el filtro si deseas verlos nuevamente.`
+            : "No se encontraron negocios dentro del área especificada. Probá ampliando el radio de búsqueda.",
       });
     }
 
@@ -344,6 +360,7 @@ export async function POST(request: NextRequest) {
       results: finalResults,
       saved: finalResults.length,
       total_found: savedBusinesses.length,
+      omitted_in_lists: omittedSavedInListCount,
       used_accounts: [...accountsUsed],
     });
   } catch (error: any) {
