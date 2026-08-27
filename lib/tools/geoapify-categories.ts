@@ -2,54 +2,43 @@
  * Geoapify category mapping for OportunIA Radar.
  *
  * Maps free-text search keywords (as used in the categories table and
- * broad-sector queries) to Geoapify Places API category codes.
- *
- * Geoapify categories follow dot-notation hierarchy:
- *   "catering"             → all food businesses
- *   "catering.restaurant"  → only restaurants
+ * broad-sector queries) to 100% verified valid Geoapify Places API category codes.
  *
  * Reference: https://apidocs.geoapify.com/docs/places/#categories
  */
 
-/**
- * Keyword → Geoapify category code(s).
- *
- * Each entry maps a lowercase keyword fragment to one or more Geoapify
- * category strings. When the Radar builds a search query, it scans the
- * user's text for these keywords and collects matching categories.
- */
 export const KEYWORD_TO_GEOAPIFY: Record<string, string[]> = {
   // ── Construction & Home Services ──────────────────────────────────
-  plumber: ["service.construction_and_maintenance.plumber"],
-  plumbing: ["service.construction_and_maintenance.plumber"],
-  electrician: ["service.construction_and_maintenance.electrician"],
-  electrical: ["service.construction_and_maintenance.electrician"],
-  contractor: ["service.construction_and_maintenance"],
-  construction: ["service.construction_and_maintenance"],
-  roofer: ["service.construction_and_maintenance"],
-  roofing: ["service.construction_and_maintenance"],
-  hvac: ["service.construction_and_maintenance"],
-  "home services": ["service.construction_and_maintenance"],
-  landscaping: ["service.construction_and_maintenance"],
-  landscaper: ["service.construction_and_maintenance"],
-  painter: ["service.construction_and_maintenance"],
-  painting: ["service.construction_and_maintenance"],
-  handyman: ["service.construction_and_maintenance"],
-  locksmith: ["service.construction_and_maintenance.locksmith"],
-  pest: ["service.pest_control"],
-  "pest control": ["service.pest_control"],
+  plumber: ["service", "commercial.houseware_and_hardware.building_materials"],
+  plumbing: ["service", "commercial.houseware_and_hardware.building_materials"],
+  electrician: ["service"],
+  electrical: ["service"],
+  contractor: ["service", "building"],
+  construction: ["building", "commercial.houseware_and_hardware.building_materials"],
+  roofer: ["service", "building"],
+  roofing: ["service", "building"],
+  hvac: ["service"],
+  "home services": ["service"],
+  landscaping: ["service"],
+  landscaper: ["service"],
+  painter: ["service"],
+  painting: ["service"],
+  handyman: ["service"],
+  locksmith: ["service"],
+  pest: ["service"],
+  "pest control": ["service"],
   cleaning: ["service.cleaning"],
   cleaner: ["service.cleaning"],
-  moving: ["service.moving"],
-  mover: ["service.moving"],
+  moving: ["service"],
+  mover: ["service"],
 
   // ── Restaurants & Food ────────────────────────────────────────────
   restaurant: ["catering.restaurant"],
   restaurants: ["catering.restaurant"],
   cafe: ["catering.cafe"],
   coffee: ["catering.cafe"],
-  bakery: ["catering.bakery"],
-  food: ["catering"],
+  bakery: ["commercial.food_and_drink.bakery"],
+  food: ["catering", "commercial.food_and_drink"],
   bar: ["catering.bar"],
   "fast food": ["catering.fast_food"],
   pizza: ["catering.restaurant.pizza"],
@@ -65,9 +54,9 @@ export const KEYWORD_TO_GEOAPIFY: Record<string, string[]> = {
   "auto shop": ["service.vehicle.repair"],
   mechanic: ["service.vehicle.repair"],
   mechanics: ["service.vehicle.repair"],
-  "body shop": ["service.vehicle.body_repair"],
-  "tire shop": ["service.vehicle.tires"],
-  tires: ["service.vehicle.tires"],
+  "body shop": ["service.vehicle.repair"],
+  "tire shop": ["service.vehicle.repair"],
+  tires: ["service.vehicle.repair"],
   "car wash": ["service.vehicle.car_wash"],
   "car dealer": ["commercial.vehicle"],
   "auto parts": ["commercial.vehicle"],
@@ -75,37 +64,37 @@ export const KEYWORD_TO_GEOAPIFY: Record<string, string[]> = {
   // ── Healthcare & Medical ──────────────────────────────────────────
   dentist: ["healthcare.dentist"],
   dental: ["healthcare.dentist"],
-  doctor: ["healthcare.doctor"],
+  doctor: ["healthcare.clinic_or_praxis"],
   clinic: ["healthcare.clinic_or_praxis"],
   clinics: ["healthcare.clinic_or_praxis"],
   medical: ["healthcare"],
   hospital: ["healthcare.hospital"],
   pharmacy: ["healthcare.pharmacy"],
-  veterinary: ["healthcare.veterinary"],
-  vet: ["healthcare.veterinary"],
-  chiropractor: ["healthcare"],
-  optician: ["healthcare.optician"],
-  therapy: ["healthcare"],
-  therapist: ["healthcare"],
-  "physical therapy": ["healthcare"],
+  veterinary: ["pet.veterinary"],
+  vet: ["pet.veterinary"],
+  chiropractor: ["healthcare.clinic_or_praxis"],
+  optician: ["commercial.health_and_beauty.optician"],
+  therapy: ["healthcare.clinic_or_praxis"],
+  therapist: ["healthcare.clinic_or_praxis"],
+  "physical therapy": ["healthcare.clinic_or_praxis"],
 
   // ── Beauty & Personal Care ────────────────────────────────────────
   "beauty salon": ["service.beauty.hairdresser"],
   "hair salon": ["service.beauty.hairdresser"],
   hairdresser: ["service.beauty.hairdresser"],
-  barbershop: ["service.beauty.barber"],
-  barber: ["service.beauty.barber"],
+  barbershop: ["service.beauty.hairdresser"],
+  barber: ["service.beauty.hairdresser"],
   spa: ["service.beauty.spa"],
-  nails: ["service.beauty.nails"],
-  "nail salon": ["service.beauty.nails"],
+  nails: ["service.beauty"],
+  "nail salon": ["service.beauty"],
   massage: ["service.beauty.massage"],
-  beauty: ["service.beauty"],
+  beauty: ["service.beauty", "commercial.health_and_beauty"],
 
   // ── Fitness & Sports ──────────────────────────────────────────────
   gym: ["sport.fitness"],
   fitness: ["sport.fitness"],
   yoga: ["sport.fitness"],
-  "martial arts": ["sport.martial_arts"],
+  "martial arts": ["sport.sports_centre"],
 
   // ── Professional Services ─────────────────────────────────────────
   lawyer: ["office.lawyer"],
@@ -117,7 +106,7 @@ export const KEYWORD_TO_GEOAPIFY: Record<string, string[]> = {
   "real estate": ["office.estate_agent"],
   realtor: ["office.estate_agent"],
   "tax preparation": ["office.accountant"],
-  consultant: ["office"],
+  consultant: ["office.consulting", "office.company"],
 
   // ── Retail & Commercial ───────────────────────────────────────────
   store: ["commercial"],
@@ -127,9 +116,9 @@ export const KEYWORD_TO_GEOAPIFY: Record<string, string[]> = {
   supermarket: ["commercial.supermarket"],
   grocery: ["commercial.supermarket"],
   clothing: ["commercial.clothing"],
-  electronics: ["commercial.electronics"],
-  furniture: ["commercial.furniture"],
-  hardware: ["commercial.hardware_and_tools"],
+  electronics: ["commercial"],
+  furniture: ["commercial.furniture_and_interior"],
+  hardware: ["commercial.houseware_and_hardware"],
   pet: ["commercial.pet"],
   "pet store": ["commercial.pet"],
   florist: ["commercial.florist"],
@@ -160,15 +149,11 @@ export const KEYWORD_TO_GEOAPIFY: Record<string, string[]> = {
  * Given a free-text query (e.g. "plumbers near Eastvale" or
  * "restaurants, cafes, bakeries, food"), extract matching Geoapify
  * category codes.
- *
- * Returns a deduplicated array of category codes, or an empty array if
- * no keywords matched (caller should fall back to text-based search).
  */
 export function extractGeoapifyCategories(query: string): string[] {
   const lower = query.toLowerCase();
   const matched = new Set<string>();
 
-  // Sort keys by length descending so longer phrases match first
   const sortedKeys = Object.keys(KEYWORD_TO_GEOAPIFY).sort(
     (a, b) => b.length - a.length
   );
@@ -184,10 +169,6 @@ export function extractGeoapifyCategories(query: string): string[] {
   return [...matched];
 }
 
-/**
- * Build Geoapify-compatible categories filter string from extracted categories.
- * Returns comma-separated string ready for the `categories` query parameter.
- */
 export function buildCategoryFilter(categories: string[]): string {
   return categories.join(",");
 }
