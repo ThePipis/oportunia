@@ -20,7 +20,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   textSearchWithFallback,
   type PlaceSearchResult,
-} from "@/lib/tools/google-places-full";
+} from "@/lib/tools/geoapify-places";
 import { upsertBusiness } from "@/lib/db/repositories/businesses";
 import { haversineMiles, milesToMeters } from "@/lib/utils/distance";
 import {
@@ -306,7 +306,7 @@ export async function POST(request: NextRequest) {
         business_types: place.types?.join(","),
         primary_type: place.primaryType ?? place.primaryTypeDisplayName?.text,
         source_url: place.googleMapsUri,
-        source_engine: "google_places",
+        source_engine: "geoapify",
         distance_miles: distanceMiles,
         last_crawled: Math.floor(Date.now() / 1000),
         raw_data_json: JSON.stringify(place),

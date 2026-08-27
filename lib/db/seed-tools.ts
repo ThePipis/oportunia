@@ -10,6 +10,19 @@ import { listTools, createTool } from "./repositories/tools";
 const TOOL_TEMPLATES = [
   {
     type: "api_key" as const,
+    name: "geoapify",
+    display_name: "Geoapify Places API",
+    description:
+      "Encuentra negocios locales con nombre, dirección, teléfono, email, sitio web y horarios. 3.000 créditos/día gratis (~90.000/mes). Sin tarjeta obligatoria. Multi-cuenta con auto-fallback.",
+    icon: "🌍",
+    docs_url: "https://myprojects.geoapify.com/",
+    sort_order: 8,
+    quota_limit: 3000,
+    quota_period: "day" as const,
+    supports_multiple_keys: 1 as any,
+  },
+  {
+    type: "api_key" as const,
     name: "google-places",
     display_name: "Google Places API (New)",
     description:

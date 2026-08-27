@@ -267,6 +267,37 @@ export async function checkLocalLLM(
   return { ok: false, latencyMs: Date.now() - start, error: lastError };
 }
 
+export async function checkGeoapify(
+  apiKey: string
+): Promise<HealthCheckResult> {
+  const start = Date.now();
+  try {
+    const res = await checkWithTimeout(() =>
+      fetch(
+        `https://api.geoapify.com/v2/places?categories=catering.restaurant&filter=circle:-117.56,33.94,1000&limit=1&apiKey=${apiKey}`,
+        { method: "GET" }
+      )
+    );
+    const latencyMs = Date.now() - start;
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      return {
+        ok: false,
+        latencyMs,
+        error: `HTTP ${res.status}: ${body.slice(0, 200)}`,
+      };
+    }
+    const data = await res.json();
+    return {
+      ok: true,
+      latencyMs,
+      meta: { places_returned: data.features?.length ?? 0 },
+    };
+  } catch (e: any) {
+    return { ok: false, latencyMs: Date.now() - start, error: e.message };
+  }
+}
+
 export async function checkAgentReach(
   _endpoint?: string
 ): Promise<HealthCheckResult> {
@@ -293,6 +324,7 @@ export async function checkAgentReach(
 }
 
 export const HEALTH_CHECKS: Record<string, (key: string) => Promise<HealthCheckResult>> = {
+  "geoapify": checkGeoapify,
   "google-places": checkGooglePlaces,
   "yelp-fusion": checkYelp,
   "tavily": checkTavily,

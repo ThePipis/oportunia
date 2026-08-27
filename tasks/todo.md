@@ -131,5 +131,20 @@
     - [x] **Filtro Inteligente de Exclusión (`🚫 Ocultar en listas`)**: Omite de las búsquedas los negocios que ya se guardaron en cualquiera de tus listas, ahorrando llamadas a la API y prospectando únicamente leads nuevos.
     - [x] **Corrección de Scripts de Producción (`prod-loop.ps1` / `prod-loop.cmd`)**: Actualizada la validación para verificar `.next\BUILD_ID` y autocompilar si se ejecutó en dev mode.
 
+  - [x] **Migración del Motor de Búsqueda: Google Places API → Geoapify Places API (Opción 1 de PLACES_MIGRATION_PLAN.md)**:
+    - [x] Creado `lib/tools/geoapify-categories.ts`: Mapeo exhaustivo de 100+ keywords → categorías Geoapify (construction, food, auto, healthcare, beauty, fitness, professional services, retail, education).
+    - [x] Creado `lib/tools/geoapify-places.ts`: Módulo drop-in replacement con `textSearch`, `textSearchWithFallback`, normalización GeoJSON → `PlaceSearchResult[]`, soporte multi-cuenta vía `withToolFallback`.
+    - [x] Actualizado `app/api/radar/search/route.ts`: Import cambiado de `google-places-full` a `geoapify-places`, `source_engine: "geoapify"`.
+    - [x] Añadido template de herramienta en `lib/db/seed-tools.ts` (sort_order 8, quota 3.000/día).
+    - [x] Añadido health check `checkGeoapify()` en `lib/tools/health-checks.ts` con registro en `HEALTH_CHECKS`.
+    - [x] Traducciones bilingües (ES/EN) añadidas en `lib/i18n/es.json` y `en.json`.
+    - [x] `.env.example` actualizado con `GEOAPIFY_API_KEY` como proveedor primario.
+    - [x] Verificación TypeScript: `npx tsc --noEmit` → 0 errores.
+
 ## Próximos Pasos Disponibles
+- [ ] Probar Geoapify en producción con API Key real y validar resultados del Radar.
+- [ ] **Opción 2 de PLACES_MIGRATION_PLAN.md:** Implementar Overture Maps + DuckDB (Open Source ilimitado).
+- [ ] **Opción 3 de PLACES_MIGRATION_PLAN.md:** Implementar gosom/google-maps-scraper (Self-Hosted).
+- [ ] **Opción 4 de PLACES_MIGRATION_PLAN.md:** Implementar TomTom Search API (Freemium).
+- [ ] Decidir stack final y eliminar código legacy de Google Places si ya no se necesita.
 - [ ] Incorporación de nuevas funciones de prospección o integraciones de LLMs adicionales según demanda.

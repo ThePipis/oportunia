@@ -479,6 +479,7 @@
       "oauth": "OAuth"
     },
     "descriptions": {
+      "geoapify": "Encuentra negocios locales con nombre, dirección, teléfono, email, sitio web y horarios. 3.000 créditos/día gratis (~90.000/mes). Sin tarjeta obligatoria. Multi-cuenta con auto-fallback.",
       "google-places": "Encuentra negocios locales. Nombre, dirección, teléfono, rating, reseñas, horarios, sitio web. $200/mes gratis por proyecto GCP. Soporta múltiples proyectos con auto-fallback.",
       "yelp-fusion": "Reseñas reales, calificaciones, categorías de negocio. 5,000 calls/día gratis por app. Soporta múltiples apps con auto-fallback.",
       "tavily": "Búsqueda web + extracción de contenido. 1,000 searches/mes gratis por cuenta. Soporta multi-cuenta con auto-fallback.",
