@@ -1295,7 +1295,7 @@ function getBusinessCategory(
                             onClick={() => setSelectedTiers([])}
                             className="text-[11px] text-sky-600 dark:text-sky-400 hover:underline underline-offset-2 ml-1 font-semibold whitespace-nowrap"
                           >
-                            {t("radar.viewAll", "✕ Ver todos")}
+                            {t("radar.clearTierFilter", "✕ Ver todos")}
                           </button>
                         )}
 
