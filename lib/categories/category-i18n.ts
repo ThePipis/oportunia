@@ -117,10 +117,43 @@ const CATEGORY_TRANSLATIONS_ES: Record<string, string> = {
   // Hospitality & Lifestyle
   beauty_salon: "Salón de Belleza",
   hair_salon: "Peluquería / Barbería",
-  hair_care: "Cuidado del Cabello",
+  hair_care: "Peluquería / Barbería",
+  hairdresser: "Peluquería / Barbería",
+  "service beauty hairdresser": "Peluquería / Barbería",
+  "service.beauty.hairdresser": "Peluquería / Barbería",
   barber_shop: "Barbería",
   "barber shop": "Barbería",
+  barber: "Barbería",
   spa: "Spa & Bienestar",
+  "service beauty spa": "Spa & Bienestar",
+  "service.beauty.spa": "Spa & Bienestar",
+  "service beauty massage": "Masajes & Spa",
+  "service.beauty.massage": "Masajes & Spa",
+  "service beauty": "Estética & Belleza",
+  "service.beauty": "Estética & Belleza",
+  "service vehicle repair": "Taller Mecánico",
+  "service.vehicle.repair": "Taller Mecánico",
+  "service vehicle car wash": "Lavado de Autos (Car Wash)",
+  "service.vehicle.car_wash": "Lavado de Autos (Car Wash)",
+  "commercial food and drink bakery": "Panadería / Pastelería",
+  "commercial.food_and_drink.bakery": "Panadería / Pastelería",
+  "commercial food and drink": "Alimentos y Bebidas",
+  "catering restaurant": "Restaurante",
+  "catering.restaurant": "Restaurante",
+  "catering cafe": "Cafetería",
+  "catering.cafe": "Cafetería",
+  "healthcare dentist": "Dentista / Odontología",
+  "healthcare.dentist": "Dentista / Odontología",
+  "healthcare clinic or praxis": "Clínica Médica",
+  "healthcare.clinic_or_praxis": "Clínica Médica",
+  "pet veterinary": "Veterinaria / Mascotas",
+  "pet.veterinary": "Veterinaria / Mascotas",
+  "sport fitness": "Gimnasio / Fitness",
+  "sport.fitness": "Gimnasio / Fitness",
+  "office lawyer": "Abogados / Bufete Legal",
+  "office.lawyer": "Abogados / Bufete Legal",
+  "office accountant": "Contabilidad & Impuestos (CPA)",
+  "office.accountant": "Contabilidad & Impuestos (CPA)",
   gym: "Gimnasio / Fitness",
   fitness_center: "Centro Fitness",
   lodging: "Hotel / Hospedaje",
@@ -192,6 +225,9 @@ const CATEGORY_TRANSLATIONS_EN: Record<string, string> = {
   accounting: "Accounting & CPA",
   real_estate_agency: "Real Estate Agency",
   beauty_salon: "Beauty Salon",
+  hair_salon: "Hair Salon / Barbershop",
+  hairdresser: "Hair Salon / Barbershop",
+  "service.beauty.hairdresser": "Hair Salon / Barbershop",
   gym: "Gym & Fitness",
   lodging: "Hotel & Lodging",
   car_wash: "Car Wash",
@@ -206,7 +242,7 @@ const CATEGORY_TRANSLATIONS_EN: Record<string, string> = {
 };
 
 /**
- * Clean and translate a category key or raw Google/Yelp type
+ * Clean and translate a category key or raw Google/Yelp/Geoapify type
  */
 export function translateCategory(
   raw: string | null | undefined,
@@ -214,13 +250,17 @@ export function translateCategory(
 ): string {
   if (!raw || raw.trim().length === 0) return "—";
 
-  const cleanKey = raw.toLowerCase().trim().replace(/[\-_]+/g, " ");
-  const directKey = raw.toLowerCase().trim().replace(/\s+/g, "_");
+  const lower = raw.toLowerCase().trim();
+  const cleanKey = lower.replace(/[\-_.]+/g, " ");
+  const directKey = lower.replace(/[\-.\s]+/g, "_");
+  const leafKey = lower.split(".").pop()?.replace(/[\-_]+/g, " ") || "";
 
   if (locale === "es") {
     // 1. Direct match in Spanish dictionary
+    if (CATEGORY_TRANSLATIONS_ES[lower]) return CATEGORY_TRANSLATIONS_ES[lower];
     if (CATEGORY_TRANSLATIONS_ES[cleanKey]) return CATEGORY_TRANSLATIONS_ES[cleanKey];
     if (CATEGORY_TRANSLATIONS_ES[directKey]) return CATEGORY_TRANSLATIONS_ES[directKey];
+    if (CATEGORY_TRANSLATIONS_ES[leafKey]) return CATEGORY_TRANSLATIONS_ES[leafKey];
 
     // 2. Partial substring matching
     for (const [key, translated] of Object.entries(CATEGORY_TRANSLATIONS_ES)) {
@@ -230,11 +270,14 @@ export function translateCategory(
     }
   } else {
     // English mapping
+    if (CATEGORY_TRANSLATIONS_EN[lower]) return CATEGORY_TRANSLATIONS_EN[lower];
     if (CATEGORY_TRANSLATIONS_EN[cleanKey]) return CATEGORY_TRANSLATIONS_EN[cleanKey];
     if (CATEGORY_TRANSLATIONS_EN[directKey]) return CATEGORY_TRANSLATIONS_EN[directKey];
+    if (CATEGORY_TRANSLATIONS_EN[leafKey]) return CATEGORY_TRANSLATIONS_EN[leafKey];
   }
 
   // 3. Fallback clean title case
-  const words = cleanKey.split(" ");
+  const target = leafKey || cleanKey;
+  const words = target.split(" ");
   return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }

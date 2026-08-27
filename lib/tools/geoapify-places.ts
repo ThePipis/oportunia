@@ -169,11 +169,16 @@ function normalizeFeature(feature: GeoapifyFeature): PlaceSearchResult {
   const lon = feature.geometry?.coordinates?.[0] ?? p.lon;
   const lat = feature.geometry?.coordinates?.[1] ?? p.lat;
 
-  // Build a Google Maps link from coordinates
-  const googleMapsUri =
-    lat && lon
-      ? `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`
-      : undefined;
+  // Build a rich Google Maps link that opens the actual business place profile (Name + Address)
+  const placeName = p.name || raw.name || raw["name:es"] || raw["name:en"] || "";
+  const placeAddress = p.formatted || p.address_line1 || "";
+  const queryStr = [placeName, placeAddress].filter(Boolean).join(", ");
+
+  const googleMapsUri = queryStr
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryStr)}`
+    : lat && lon
+    ? `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`
+    : undefined;
 
   // Extract most specific primary type from categories (longest dot hierarchy)
   const categories = p.categories ?? [];
