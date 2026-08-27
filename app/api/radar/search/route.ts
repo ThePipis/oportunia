@@ -146,9 +146,9 @@ export async function POST(request: NextRequest) {
       ? Math.min(60, Math.max(10, Math.ceil(maxResults / searchQueries.length)))
       : 60;
     const textResults = await Promise.allSettled(
-      searchQueries.map(({ query }) =>
+      searchQueries.map(({ query, categoryId }) =>
         textSearchWithFallback({
-          query,
+          query: categoryId ? `${categoryId} ${query}` : query,
           locationRestriction,
           locationBias: locationRestriction,
           maxResultCount: perQueryMax,

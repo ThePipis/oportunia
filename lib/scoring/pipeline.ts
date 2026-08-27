@@ -188,6 +188,7 @@ export async function runDeepScoringPipeline(
             rating: yb.rating,
             reviewCount: yb.review_count,
             url: yb.url,
+            phone: yb.phone || yb.display_phone,
             reputationGap: Number((gRating - yb.rating).toFixed(1)),
           };
         }
@@ -205,6 +206,45 @@ export async function runDeepScoringPipeline(
   }
 
   const yelpData = yelpDataResult.status === "fulfilled" ? yelpDataResult.value : null;
+
+  // Enrich business in-memory and SQLite if Yelp provided missing ratings/reviews/phone/website
+  if (yelpData) {
+    const db = getDb();
+    const updates: string[] = [];
+    const params: any[] = [];
+
+    if (business.google_rating == null && yelpData.rating != null) {
+      business.google_rating = yelpData.rating;
+      updates.push("google_rating = ?");
+      params.push(yelpData.rating);
+    }
+    if (business.review_count == null && yelpData.reviewCount != null) {
+      business.review_count = yelpData.reviewCount;
+      updates.push("review_count = ?");
+      params.push(yelpData.reviewCount);
+    }
+    if (!business.phone && yelpData.phone) {
+      business.phone = yelpData.phone;
+      updates.push("phone = ?");
+      params.push(yelpData.phone);
+    }
+    if (!business.website && yelpData.url) {
+      business.website = yelpData.url;
+      updates.push("website = ?");
+      params.push(yelpData.url);
+    }
+
+    if (updates.length > 0) {
+      params.push(business.id);
+      try {
+        db.prepare(
+          `UPDATE businesses SET ${updates.join(", ")}, updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = ?`
+        ).run(...params);
+      } catch (err: any) {
+        console.warn(`[deep-score] Failed to persist enriched business ${business.id}: ${err.message}`);
+      }
+    }
+  }
 
   // ── Semantic Review Sentiment Analysis ──
   const rawReviewSnippets = [business.name, business.business_types].filter(Boolean).join(" ");

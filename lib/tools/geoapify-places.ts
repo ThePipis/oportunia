@@ -165,6 +165,7 @@ interface GeoapifyResponse {
 
 function normalizeFeature(feature: GeoapifyFeature): PlaceSearchResult {
   const p = feature.properties;
+  const raw = p.datasource?.raw || {};
   const lon = feature.geometry?.coordinates?.[0] ?? p.lon;
   const lat = feature.geometry?.coordinates?.[1] ?? p.lat;
 
@@ -174,25 +175,51 @@ function normalizeFeature(feature: GeoapifyFeature): PlaceSearchResult {
       ? `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`
       : undefined;
 
-  // Extract primary type from categories
+  // Extract most specific primary type from categories (longest dot hierarchy)
   const categories = p.categories ?? [];
-  const primaryType = categories.length > 0 ? categories[0] : undefined;
+  const specificCategory = categories
+    .slice()
+    .sort((a, b) => b.split(".").length - a.split(".").length)[0];
+  const primaryType = specificCategory || categories[0] || undefined;
 
   // Determine business status
   const businessStatus = "OPERATIONAL";
 
   // Parse opening hours string into structured format (best-effort)
   let regularOpeningHours: PlaceSearchResult["regularOpeningHours"] | undefined;
-  if (p.opening_hours) {
+  if (p.opening_hours || raw.opening_hours) {
     regularOpeningHours = {
-      weekdayDescriptions: [p.opening_hours],
+      weekdayDescriptions: [p.opening_hours || raw.opening_hours],
     };
   }
 
+  // Extract phone, website, email from both standard and raw OSM properties
+  const nationalPhoneNumber =
+    p.contact?.phone ||
+    raw.phone ||
+    raw["contact:phone"] ||
+    raw["phone:mobile"] ||
+    raw["telephone"] ||
+    undefined;
+
+  const websiteUri =
+    p.website ||
+    raw.website ||
+    raw["contact:website"] ||
+    raw.url ||
+    raw["contact:url"] ||
+    undefined;
+
+  const email =
+    p.contact?.email ||
+    raw.email ||
+    raw["contact:email"] ||
+    undefined;
+
   return {
     id: p.place_id,
-    name: p.name,
-    displayName: p.name ? { text: p.name } : undefined,
+    name: p.name || raw.name || raw["name:es"] || raw["name:en"],
+    displayName: (p.name || raw.name) ? { text: p.name || raw.name } : undefined,
     formattedAddress: p.formatted ?? [p.address_line1, p.address_line2].filter(Boolean).join(", "),
     shortFormattedAddress: p.address_line1 ?? undefined,
     location: lat && lon ? { latitude: lat, longitude: lon } : undefined,
@@ -200,24 +227,22 @@ function normalizeFeature(feature: GeoapifyFeature): PlaceSearchResult {
     primaryType,
     primaryTypeDisplayName: primaryType ? { text: formatCategoryName(primaryType) } : undefined,
     businessStatus,
-    websiteUri: p.website ?? undefined,
-    nationalPhoneNumber: p.contact?.phone ?? undefined,
+    websiteUri,
+    nationalPhoneNumber,
     regularOpeningHours,
     googleMapsUri,
-    email: p.contact?.email ?? undefined,
+    email,
   };
 }
 
 /**
  * Convert a Geoapify dot-notation category to a human-readable label.
- * e.g. "catering.restaurant.pizza" → "Pizza Restaurant"
+ * e.g. "service.beauty.hairdresser" → "Hairdresser"
  */
 function formatCategoryName(category: string): string {
   const parts = category.split(".");
-  return parts
-    .reverse()
-    .map((p) => p.charAt(0).toUpperCase() + p.slice(1).replace(/_/g, " "))
-    .join(" ");
+  const leaf = parts[parts.length - 1];
+  return leaf.charAt(0).toUpperCase() + leaf.slice(1).replace(/_/g, " ");
 }
 
 // ---------------------------------------------------------------------------

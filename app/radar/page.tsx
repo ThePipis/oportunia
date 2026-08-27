@@ -487,12 +487,38 @@ function getBusinessCategory(
   const [batchActionLoading, setBatchActionLoading] = React.useState<boolean>(false);
   const [batchSuccessMsg, setBatchSuccessMsg] = React.useState<string | null>(null);
 
-  // Multi-select handlers
-  const toggleSelect = (id: string) => {
+  // Multi-select handlers with Shift+Click Range Selection support
+  const lastSelectedIdRef = React.useRef<string | null>(null);
+
+  const toggleSelect = (id: string, shiftKey: boolean = false) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      const isCurrentlySelected = next.has(id);
+
+      if (shiftKey && lastSelectedIdRef.current && lastSelectedIdRef.current !== id) {
+        const currentList = paginatedResults;
+        const fromIdx = currentList.findIndex((r) => r.id === lastSelectedIdRef.current);
+        const toIdx = currentList.findIndex((r) => r.id === id);
+
+        if (fromIdx !== -1 && toIdx !== -1) {
+          const [start, end] = fromIdx < toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
+          const range = currentList.slice(start, end + 1);
+          const shouldCheck = !isCurrentlySelected;
+          range.forEach((item) => {
+            if (shouldCheck) next.add(item.id);
+            else next.delete(item.id);
+          });
+          lastSelectedIdRef.current = id;
+          return next;
+        }
+      }
+
+      if (isCurrentlySelected) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      lastSelectedIdRef.current = id;
       return next;
     });
   };
@@ -503,6 +529,7 @@ function getBusinessCategory(
 
   const clearSelection = () => {
     setSelectedIds(new Set());
+    lastSelectedIdRef.current = null;
   };
 
   // Open list modal & fetch lists
@@ -1507,13 +1534,22 @@ function getBusinessCategory(
                               >
                                 {/* 0. Checkbox Individual */}
                                 <td
-                                  className="py-1.5 px-1 text-center align-middle"
-                                  onClick={(e) => e.stopPropagation()}
+                                  className="py-1.5 px-1 text-center align-middle cursor-pointer"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleSelect(r.id, e.shiftKey);
+                                  }}
                                 >
                                   <input
                                     type="checkbox"
                                     checked={isChecked}
-                                    onChange={() => toggleSelect(r.id)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleSelect(r.id, e.shiftKey);
+                                    }}
+                                    onChange={() => {
+                                      // Handled by onClick for reliable shiftKey detection
+                                    }}
                                     className="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-700 text-sky-600 focus:ring-sky-500 cursor-pointer accent-sky-500"
                                     aria-label={`Seleccionar ${r.name}`}
                                   />
