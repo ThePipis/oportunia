@@ -75,8 +75,6 @@ const SORT_KEYS = [
 
 /**
  * SortableHeader — clickable table column header with sort indicator.
- * Renders the column label + a small arrow that shows the current sort
- * direction. Click cycles: desc ↔ asc ↔ none.
  */
 function SortableHeader({
   column,
@@ -204,71 +202,6 @@ function CopyButton({
   );
 }
 
-export default function RadarPage() {
-  const { t, locale } = useT();
-  const { state, update, clear, hydrated } = useRadarSearchState();
-
-  // Destructure the persisted state for convenient access in JSX / handlers
-  const {
-    query,
-    selectedCategoryIds,
-    city,
-    radiusMiles,
-    maxResults,
-    origin,
-    selectedBusinessId,
-    results,
-    totalFound,
-    searched,
-  } = state;
-
-  // Transient (not persisted): loading + error. These reset on every mount.
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-
-  // Hover highlight — purely visual, does NOT persist. Allows the user to
-  // sweep the mouse down the list and see the corresponding pin glow on
-  // the map without committing to a selection.
-  const [hoveredBusinessId, setHoveredBusinessId] = React.useState<
-    string | null
-  >(null);
-  const effectiveSelectedId = hoveredBusinessId ?? selectedBusinessId;
-  const [focusTick, setFocusTick] = React.useState<number>(0);
-  
-  // Persistent filter collapse state (remembers user preference)
-  const FILTER_COLLAPSED_STORAGE_KEY = "oportunia.radar.filterCollapsed.v1";
-  const [isFilterCollapsed, setIsFilterCollapsed] = React.useState<boolean>(false);
-
-  React.useEffect(() => {
-    try {
-      const stored = localStorage.getItem(FILTER_COLLAPSED_STORAGE_KEY);
-      if (stored !== null) {
-        setIsFilterCollapsed(stored === "true");
-      }
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  const toggleFilterCollapsed = () => {
-    setIsFilterCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem(FILTER_COLLAPSED_STORAGE_KEY, String(next));
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
-  };
-
-  const [expandedRowId, setExpandedRowId] = React.useState<string | null>(null);
-
-  const toggleRowExpand = React.useCallback((id: string, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    setExpandedRowId((prev) => (prev === id ? null : id));
-  }, []);
-
 const KNOWN_CITIES = [
   "Eastvale", "Corona", "Norco", "Riverside", "Jurupa Valley", "Mira Loma",
   "Ontario", "Rancho Cucamonga", "Chino Hills", "Chino", "Fontana",
@@ -285,20 +218,15 @@ const KNOWN_CITIES = [
 function sanitizeCityCandidate(str?: string | null): string | null {
   if (!str) return null;
   let c = str.trim().replace(/^[",'\s]+|[",'\s]+$/g, "");
-  // If it contains any digits (street numbers, zip codes, office numbers e.g. "Office 258", "CA 91752") -> invalid city
   if (/\d/.test(c)) return null;
-  // If it contains unit or street keywords -> invalid city
   if (/\b(office|suite|ste|unit|bldg|building|dept|floor|fl|rm|room|space|spc|apt|lot|box|po\s*box|#)\b/i.test(c)) return null;
   if (/\b(ave|avenue|st|street|blvd|boulevard|rd|road|dr|drive|hwy|highway|pkwy|parkway|lane|ln|way|ct|court|circle|cir|terrace|ter|pl|place)\b/i.test(c)) return null;
-  // If it's just state abbreviation e.g. "CA"
   if (/^[A-Z]{2}$/i.test(c)) return null;
-  // Clean trailing state or zip if attached
   c = c.replace(/,\s*(CA|California).*$/i, "").trim();
   return c.length >= 2 ? c : null;
 }
 
 function getBusinessCity(r: SearchResult): string {
-  // 1. Scan address for known Southern California / Inland Empire cities FIRST (most accurate)
   if (r.address) {
     for (const known of KNOWN_CITIES) {
       const regex = new RegExp(`\\b${known}\\b`, "i");
@@ -308,109 +236,480 @@ function getBusinessCity(r: SearchResult): string {
     }
   }
 
-  // 2. Check if stored r.city is valid and not a street/unit/number
   const validStored = sanitizeCityCandidate(r.city);
   if (validStored) {
     const match = KNOWN_CITIES.find((k) => k.toLowerCase() === validStored.toLowerCase());
     return match ?? validStored;
   }
 
-  // 3. Fallback generic parsing from address segments
   if (r.address) {
     const parts = r.address.split(",").map((p) => p.trim()).filter(Boolean);
-    while (parts.length > 0) {
-      const seg = parts.pop();
-      const clean = sanitizeCityCandidate(seg);
-      if (clean) return clean;
+    if (parts.length >= 2) {
+      for (let i = 1; i < parts.length; i++) {
+        const candidate = sanitizeCityCandidate(parts[i]);
+        if (candidate) {
+          const match = KNOWN_CITIES.find((k) => k.toLowerCase() === candidate.toLowerCase());
+          return match ?? candidate;
+        }
+      }
     }
   }
 
   return "—";
 }
 
-function getBusinessCategory(
-  r: SearchResult,
-  selectedCategoryIds: string[] = [],
-  currentLocale: "es" | "en" = "es"
-): string {
-  // 1. If user searched for specific categories, check if the business matches any of them
-  if (selectedCategoryIds.length > 0) {
-    const nameLower = r.name.toLowerCase();
-    const typeLower = (r.primary_type || "").toLowerCase().replace(/_/g, " ");
-
-    for (const catId of selectedCategoryIds) {
-      const catKey = catId.toLowerCase().replace(/_/g, " ");
-      if (
-        typeLower.includes(catKey) ||
-        nameLower.includes(catKey) ||
-        (catKey === "plumber" && (nameLower.includes("plumb") || nameLower.includes("rooter") || nameLower.includes("repipe") || typeLower.includes("plumb"))) ||
-        (catKey === "contractor" && (nameLower.includes("contract") || nameLower.includes("construct") || nameLower.includes("remodel") || typeLower.includes("contract"))) ||
-        (catKey === "restaurant" && (nameLower.includes("restaur") || nameLower.includes("grill") || nameLower.includes("cafe") || nameLower.includes("kitchen") || typeLower.includes("food") || typeLower.includes("restaurant"))) ||
-        (catKey === "bakery" && (nameLower.includes("bake") || nameLower.includes("panad") || nameLower.includes("pastry") || nameLower.includes("cake") || typeLower.includes("bakery")))
-      ) {
-        return translateCategory(catId, currentLocale);
-      }
+function getBusinessCategory(r: SearchResult, selectedCategoryIds: string[], locale: "es" | "en" = "es"): string {
+  if (selectedCategoryIds.length === 1) {
+    const singleCat = selectedCategoryIds[0];
+    const singleCatName = singleCat.charAt(0).toUpperCase() + singleCat.slice(1);
+    const translatedSingle = translateCategory(singleCatName, locale);
+    if (translatedSingle && !translatedSingle.toLowerCase().includes("business") && !translatedSingle.toLowerCase().includes("point of interest")) {
+      return translatedSingle;
     }
   }
 
-  // 2. Format and translate primary_type cleanly (if valid and not too generic)
-  const rawType = (r.primary_type || "").trim().toLowerCase();
-  if (rawType && rawType !== "point_of_interest" && rawType !== "establishment" && rawType !== "unknown") {
-    const translated = translateCategory(r.primary_type, currentLocale);
-    if (translated && translated !== "—") return translated;
+  if (r.primary_type) {
+    const raw = r.primary_type.trim();
+    if (raw.length > 0) {
+      const parts = raw.split(",").map((p: string) => p.trim()).filter(Boolean);
+      const isGeneric = (str: string) => {
+        const s = str.toLowerCase();
+        return s === "negocio" || s === "business" || s === "point of interest" || s === "establishment" || s === "local business" || s === "point_of_interest";
+      };
+
+      const specificPart = parts.find((p: string) => !isGeneric(p));
+      const chosen = specificPart || parts[0] || raw;
+      const translated = translateCategory(chosen, locale);
+      if (translated && !isGeneric(translated)) {
+        return translated;
+      }
+      if (translated) return translated;
+    }
   }
 
-  // 3. Smart Name & Keyword Heuristic Fallbacks (when Google Places leaves primaryType empty)
-  const n = r.name.toLowerCase();
-  if (n.includes("embroid") || n.includes("stitch") || n.includes("apparel") || n.includes("custom wear") || n.includes("uniform")) {
-    return currentLocale === "en" ? "Embroidery & Custom Stitching" : "Bordados & Confección";
-  }
-  if (n.includes("auto") || n.includes("tint") || n.includes("tire") || n.includes("smog") || n.includes("mechanic") || n.includes("motor") || n.includes("brake") || n.includes("lube") || n.includes("car care") || n.includes("body shop")) {
-    return currentLocale === "en" ? "Auto Services & Repair" : "Taller Mecánico / Automotriz";
-  }
-  if (n.includes("dental") || n.includes("dentist") || n.includes("ortho") || n.includes("smile") || n.includes("teeth")) {
-    return currentLocale === "en" ? "Dental Clinic" : "Dentista / Odontología";
-  }
-  if (n.includes("plumb") || n.includes("rooter") || n.includes("drain") || n.includes("pipe") || n.includes("water heater")) {
-    return currentLocale === "en" ? "Plumbing Services" : "Plomería & Fontanería";
-  }
-  if (n.includes("roof") || n.includes("roofing") || n.includes("solar") || n.includes("gutter")) {
-    return currentLocale === "en" ? "Roofing & Solar Contractor" : "Tejados & Roofing";
-  }
-  if (n.includes("hvac") || n.includes("air condition") || n.includes("heating") || n.includes("cooling")) {
-    return currentLocale === "en" ? "HVAC & Climate Control" : "Climatización (HVAC)";
-  }
-  if (n.includes("contract") || n.includes("construct") || n.includes("remodel") || n.includes("builder") || n.includes("electric")) {
-    return currentLocale === "en" ? "General Contractor" : "Contratista General";
-  }
-  if (n.includes("law") || n.includes("attorney") || n.includes("legal") || n.includes("lawyer") || n.includes("advocate")) {
-    return currentLocale === "en" ? "Law Firm / Legal" : "Abogados / Bufete Legal";
-  }
-  if (n.includes("cpa") || n.includes("tax") || n.includes("accounting") || n.includes("bookkeep") || n.includes("financial")) {
-    return currentLocale === "en" ? "Accounting & Taxes (CPA)" : "Contabilidad & Impuestos (CPA)";
-  }
-  if (n.includes("real estate") || n.includes("realty") || n.includes("properties") || n.includes("escrow") || n.includes("mortgage")) {
-    return currentLocale === "en" ? "Real Estate Agency" : "Bienes Raíces / Inmobiliaria";
-  }
-  if (n.includes("cafe") || n.includes("coffee") || n.includes("bake") || n.includes("cake") || n.includes("donut") || n.includes("pizza") || n.includes("taco") || n.includes("grill") || n.includes("burger") || n.includes("bistro") || n.includes("kitchen") || n.includes("restaurant") || n.includes("diner") || n.includes("sushi")) {
-    return currentLocale === "en" ? "Restaurant / Food & Beverage" : "Restaurante / Alimentos";
-  }
-  if (n.includes("salon") || n.includes("barber") || n.includes("spa") || n.includes("beauty") || n.includes("lash") || n.includes("nail") || n.includes("hair") || n.includes("esthetics")) {
-    return currentLocale === "en" ? "Beauty & Personal Care" : "Salón de Belleza & Estética";
-  }
-  if (n.includes("clean") || n.includes("maid") || n.includes("janitorial") || n.includes("wash") || n.includes("pressure wash")) {
-    return currentLocale === "en" ? "Cleaning & Maintenance" : "Servicios de Limpieza";
-  }
-  if (n.includes("market") || n.includes("store") || n.includes("shop") || n.includes("boutique") || n.includes("mart") || n.includes("retail") || n.includes("supply") || n.includes("jewel") || n.includes("florist")) {
-    return currentLocale === "en" ? "Store / Retail Commerce" : "Tienda / Comercio Local";
-  }
-  if (n.includes("inc") || n.includes("corp") || n.includes("llc") || n.includes("group") || n.includes("enterprise") || n.includes("industr") || n.includes("holdings") || n.includes("partners") || n.includes("management") || n.includes("logistics")) {
-    return currentLocale === "en" ? "Company / Corporate Office" : "Empresa / Corporativo";
+  if (selectedCategoryIds.length > 0) {
+    const firstCat = selectedCategoryIds[0];
+    const catName = firstCat.charAt(0).toUpperCase() + firstCat.slice(1);
+    return translateCategory(catName, locale) || catName;
   }
 
-  // 4. Professional Generic Fallback (never leave a cold blank "—")
-  return currentLocale === "en" ? "Local Business / Company" : "Negocio Local / Empresa";
+  return translateCategory("Negocio Local", locale);
 }
+
+// ───────── Isolated Memoized Table Row for Maximum React Performance ─────────
+interface RadarTableRowProps {
+  r: SearchResult;
+  isSelected: boolean;
+  isExpanded: boolean;
+  isChecked: boolean;
+  cityDisplay: string;
+  categoryDisplay: string;
+  locale: string;
+  t: (key: string, defaultText?: string) => string;
+  onSelect: (id: string) => void;
+  onToggleExpand: (id: string, e?: React.MouseEvent) => void;
+  onToggleCheck: (id: string, shiftKey: boolean) => void;
+}
+
+const RadarTableRow = React.memo(
+  function RadarTableRow({
+    r,
+    isSelected,
+    isExpanded,
+    isChecked,
+    cityDisplay,
+    categoryDisplay,
+    locale,
+    t,
+    onSelect,
+    onToggleExpand,
+    onToggleCheck,
+  }: RadarTableRowProps) {
+    const mapsHref =
+      r.lat != null && r.lng != null
+        ? `https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lng}`
+        : null;
+
+    const count =
+      r.matched_services_count != null
+        ? r.matched_services_count
+        : r.total_score != null
+        ? r.total_score >= 75
+          ? 3
+          : r.total_score >= 60
+          ? 2
+          : 1
+        : 2;
+
+    const serviceNames =
+      locale === "en" && r.matched_service_names_en && r.matched_service_names_en.length > 0
+        ? r.matched_service_names_en
+        : r.matched_service_names && r.matched_service_names.length > 0
+        ? r.matched_service_names
+        : count === 3
+        ? [
+            locale === "en" ? "24/7 AI Appointment Setter" : "AI Appointment Setter 24/7",
+            locale === "en" ? "5★ Review Booster" : "Review Booster 5★",
+            locale === "en" ? "Web Lead Magnet Assistant" : "Asistente Web Lead Magnet",
+          ]
+        : count === 2
+        ? [
+            locale === "en" ? "5★ Review Booster" : "Review Booster 5★",
+            locale === "en" ? "24/7 AI Appointment Setter" : "AI Appointment Setter 24/7",
+          ]
+        : [
+            locale === "en"
+              ? "Google Business & Review Booster"
+              : "Google Business & Review Booster",
+          ];
+
+    return (
+      <React.Fragment>
+        <tr
+          id={`biz-row-${r.id}`}
+          onClick={() => onSelect(r.id)}
+          className={`border-b border-slate-100 dark:border-white/5 transition-colors cursor-pointer ${
+            isChecked
+              ? "bg-sky-500/10 dark:bg-sky-500/15 border-l-4 border-l-sky-500"
+              : isSelected
+              ? "bg-orange-500/15 border-l-4 border-l-orange-500 dark:bg-orange-500/20"
+              : isExpanded
+              ? "bg-slate-50/90 dark:bg-slate-800/60 border-l-4 border-l-sky-500"
+              : "hover:bg-slate-50 dark:hover:bg-slate-800/40"
+          }`}
+        >
+          {/* 0. Checkbox Individual */}
+          <td
+            className="py-1.5 px-1 text-center align-middle cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleCheck(r.id, e.shiftKey);
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={isChecked}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleCheck(r.id, e.shiftKey);
+              }}
+              onChange={() => {}}
+              className="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-700 text-sky-600 focus:ring-sky-500 cursor-pointer accent-sky-500"
+              aria-label={`Seleccionar ${r.name}`}
+            />
+          </td>
+
+          {/* 1. Negocio con toggle expandible */}
+          <td className="py-1.5 pl-2 pr-2 align-middle">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <button
+                type="button"
+                onClick={(e) => onToggleExpand(r.id, e)}
+                className="p-0.5 -ml-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors shrink-0"
+                title={isExpanded ? "Plegar detalles de negocio" : "Desplegar detalles de negocio"}
+                aria-expanded={isExpanded}
+              >
+                <span className="inline-block text-[9px] font-mono leading-none transition-transform duration-150">
+                  {isExpanded ? "▼" : "▶"}
+                </span>
+              </button>
+              <div
+                className="font-bold text-slate-900 dark:text-slate-100 truncate text-xs select-text cursor-text"
+                title={r.name}
+              >
+                {r.name}
+              </div>
+            </div>
+          </td>
+
+          {/* 2. Categoría */}
+          <td className="py-1.5 px-2 align-middle">
+            <span
+              className="inline-block max-w-full truncate text-[11px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 font-medium"
+              title={categoryDisplay}
+            >
+              {categoryDisplay}
+            </span>
+          </td>
+
+          {/* 3. Ciudad */}
+          <td className="py-1.5 px-2 align-middle">
+            <span
+              className="inline-flex items-center gap-1 text-xs text-slate-700 dark:text-slate-300 font-medium whitespace-nowrap"
+              title={cityDisplay}
+            >
+              <span className="text-slate-400 text-[10px] shrink-0">📍</span>
+              <span className="truncate">{cityDisplay}</span>
+            </span>
+          </td>
+
+          {/* 4. Score */}
+          <td className="py-1.5 px-1.5 align-middle whitespace-nowrap">
+            {r.total_score != null ? (
+              <div className="flex items-center gap-1">
+                {r.total_score >= 75 ? (
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-red-50 text-red-800 border border-red-200 dark:bg-red-500/15 dark:border-red-500/40 dark:text-red-300 shadow-2xs font-mono"
+                    title={`Score 5D: ${r.total_score}/100 - HOT: Alta urgencia y ticket alto. Cerrar esta semana.`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                    🔥 {r.total_score} HOT
+                  </span>
+                ) : r.total_score >= 60 ? (
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-500/15 dark:border-emerald-500/40 dark:text-emerald-300 shadow-2xs font-mono"
+                    title={`Score 5D: ${r.total_score}/100 - WARM: Lead caliente / calificado.`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    ⚡ {r.total_score} WARM
+                  </span>
+                ) : r.total_score >= 40 ? (
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-orange-50 text-orange-800 border border-orange-200 dark:bg-orange-500/15 dark:border-orange-500/40 dark:text-orange-300 shadow-2xs font-mono"
+                    title={`Score 5D: ${r.total_score}/100 - NURTURE: Oportunidad media / Seguimiento.`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+                    🌱 {r.total_score} NURTURE
+                  </span>
+                ) : (
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-50 text-yellow-800 border border-yellow-200 dark:bg-yellow-500/15 dark:border-yellow-500/40 dark:text-yellow-300 shadow-2xs font-mono"
+                    title={`Score 5D: ${r.total_score}/100 - SKIP: Descartar o baja prioridad.`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
+                    ⚪ {r.total_score} SKIP
+                  </span>
+                )}
+              </div>
+            ) : (
+              <span className="text-slate-400 text-xs font-mono">-</span>
+            )}
+          </td>
+
+          {/* 5. Servicios IA a Instalar */}
+          <td className="py-1.5 px-1.5 align-middle text-center whitespace-nowrap">
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-purple-50 text-purple-800 border border-purple-200 dark:bg-purple-500/15 dark:border-purple-500/30 dark:text-purple-300 shadow-2xs font-mono cursor-help transition-all hover:scale-105"
+              title={`${locale === "en" ? "Matched AI Services to install:" : "Servicios IA a instalar:"}\n• ${serviceNames.join("\n• ")}`}
+            >
+              <span>🤖</span>
+              <span>
+                {count} {count === 1 ? t("radar.serviceSingleBadge", "servicio") : t("radar.servicesBadge", "servicios")}
+              </span>
+            </span>
+          </td>
+
+          {/* 6. Rating */}
+          <td className="py-1.5 px-1.5 align-middle text-center whitespace-nowrap">
+            {r.rating != null ? (
+              <div className="inline-flex items-baseline gap-1 text-xs">
+                <span className="text-amber-500 font-bold">
+                  ⭐ {r.rating.toFixed(1)}
+                </span>
+                {r.review_count != null && (
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 tabular-nums">
+                    ({r.review_count})
+                  </span>
+                )}
+              </div>
+            ) : (
+              <span className="text-slate-400 text-xs">—</span>
+            )}
+          </td>
+
+          {/* 7. Dist */}
+          <td className="py-1.5 px-1.5 align-middle text-right whitespace-nowrap">
+            {r.distance_miles != null ? (
+              <span className="font-mono text-[11px] text-sky-700 dark:text-sky-300 tabular-nums font-semibold">
+                {r.distance_miles.toFixed(1)} mi
+              </span>
+            ) : (
+              <span className="text-slate-400 text-xs">—</span>
+            )}
+          </td>
+
+          {/* 8. Acción */}
+          <td className="py-1.5 pl-1.5 pr-2.5 align-middle text-right whitespace-nowrap">
+            <div
+              className="inline-flex items-center gap-1 justify-end"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Link
+                href={`/radar/${r.id}`}
+                prefetch={true}
+                className="inline-flex items-center justify-center rounded-md h-6 px-2 text-[11px] bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-semibold shadow-xs transition-colors"
+              >
+                {t("radar.viewProfile", "Perfil →")}
+              </Link>
+              <button
+                type="button"
+                onClick={(e) => onToggleExpand(r.id, e)}
+                className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                title={isExpanded ? t("radar.collapseFilters", "Ocultar detalles") : t("common.viewMore", "Ver más")}
+              >
+                <span className="text-[10px] font-mono leading-none">
+                  {isExpanded ? "▲" : "▼"}
+                </span>
+              </button>
+            </div>
+          </td>
+        </tr>
+
+        {/* Expandable Details Drawer */}
+        {isExpanded && (
+          <tr className="bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200 dark:border-white/10 animate-in fade-in-50 duration-150">
+            <td colSpan={9} className="p-3 pl-8">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 rounded-lg bg-white dark:bg-slate-950/80 border border-slate-200/80 dark:border-white/10 shadow-xs">
+                {/* 1. Ubicación y Dirección */}
+                <div className="space-y-1.5 text-xs flex flex-col justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300">
+                      <span>📍</span>
+                      <span>{t("radar.locationAndAddress", "Ubicación y Dirección")}</span>
+                    </div>
+                    <p className="text-slate-600 dark:text-slate-400 text-[11px] leading-relaxed select-text">
+                      {r.address || t("radar.noAddress", "Dirección no especificada")}
+                    </p>
+                  </div>
+                  {mapsHref && (
+                    <a
+                      href={mapsHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-sky-600 dark:text-sky-400 hover:underline text-[11px] font-medium mt-1"
+                    >
+                      <span>{t("common.openGoogleMaps", "Google Maps")}</span>
+                      <span className="text-[10px]">↗</span>
+                    </a>
+                  )}
+                </div>
+
+                {/* 2. Contacto y Web */}
+                <div className="space-y-1 text-xs flex flex-col">
+                  <div className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300">
+                    <span>📞</span>
+                    <span>{t("radar.contactAndWeb", "Contacto y Web")}</span>
+                  </div>
+                  <div className="space-y-1.5 text-[11px] pt-0.5">
+                    {r.phone ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-500 dark:text-slate-400 font-medium">{t("radar.phoneLabel", "Teléfono:")}</span>
+                        <a
+                          href={`tel:${r.phone}`}
+                          className="text-sky-600 dark:text-sky-400 hover:underline font-mono"
+                        >
+                          {r.phone}
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-500 dark:text-slate-400 font-medium">{t("radar.phoneLabel", "Teléfono:")}</span>
+                        <span className="text-slate-400 italic text-[11px]">{t("radar.noPhone", "Sin teléfono registrado")}</span>
+                      </div>
+                    )}
+                    {r.website ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-500 dark:text-slate-400 font-medium">{t("radar.webLabel", "Sitio Web:")}</span>
+                        <a
+                          href={r.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-sky-600 dark:text-sky-400 hover:underline max-w-[190px] truncate font-medium"
+                          title={r.website}
+                        >
+                          <span>🌐 {r.website.replace(/^https?:\/\/(www\.)?/, "")}</span>
+                          <span className="text-[10px]">↗</span>
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-500 dark:text-slate-400 font-medium">{t("radar.webLabel", "Sitio Web:")}</span>
+                        <span className="text-slate-400 italic text-[11px]">{t("radar.noWeb", "Sin sitio web oficial")}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 3. Acciones Rápidas & CRM */}
+                <div className="space-y-1.5 text-xs flex flex-col justify-between">
+                  <div className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300">
+                    <span>⚡</span>
+                    <span>{t("radar.quickActions", "Acciones Rápidas")}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 w-full">
+                    <AddToListButton businessId={r.id} businessName={r.name} className="w-full" />
+                    <AddToCrmButton businessId={r.id} businessName={r.name} className="w-full" />
+                  </div>
+                  <Link
+                    href={`/proposals/${r.id}`}
+                    prefetch={true}
+                    className="inline-flex items-center justify-center gap-1 w-full py-1.5 px-3 rounded-md bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold text-xs shadow-xs transition-all"
+                  >
+                    <span>{t("radar.viewProposal", "Ver Análisis y Propuesta IA →")}</span>
+                  </Link>
+                </div>
+              </div>
+            </td>
+          </tr>
+        )}
+      </React.Fragment>
+    );
+  },
+  (prev, next) => {
+    return (
+      prev.r.id === next.r.id &&
+      prev.r.total_score === next.r.total_score &&
+      prev.r.rating === next.r.rating &&
+      prev.r.review_count === next.r.review_count &&
+      prev.r.distance_miles === next.r.distance_miles &&
+      prev.isSelected === next.isSelected &&
+      prev.isExpanded === next.isExpanded &&
+      prev.isChecked === next.isChecked &&
+      prev.cityDisplay === next.cityDisplay &&
+      prev.categoryDisplay === next.categoryDisplay &&
+      prev.locale === next.locale
+    );
+  }
+);
+
+export default function RadarPage() {
+  const { t, locale } = useT();
+  const { state, update, clear, hydrated } = useRadarSearchState();
+
+  const {
+    query,
+    selectedCategoryIds,
+    city,
+    radiusMiles,
+    maxResults,
+    origin,
+    selectedBusinessId,
+    results,
+    totalFound,
+    searched,
+  } = state;
+
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [focusTick, setFocusTick] = React.useState<number>(0);
+  
+  // Filter collapse state (always collapsed/folded by default to give maximum visibility to map & table)
+  const [isFilterCollapsed, setIsFilterCollapsed] = React.useState<boolean>(true);
+
+  const toggleFilterCollapsed = () => {
+    setIsFilterCollapsed((prev) => !prev);
+  };
+
+  const handleClearFilters = () => {
+    clear();
+  };
+
+  const [expandedRowId, setExpandedRowId] = React.useState<string | null>(null);
+
+  const toggleRowExpand = React.useCallback((id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setExpandedRowId((prev) => (prev === id ? null : id));
+  }, []);
 
   // ───────── Score Tier Filters (HOT, WARM, NURTURE, SKIP) ─────────
   type ScoreTier = "hot" | "warm" | "nurture" | "skip";
@@ -440,236 +739,134 @@ function getBusinessCategory(
     })
       .then((res) => res.json())
       .then((data) => {
-        if (!data?.scores) return;
-        let changed = false;
-        const updatedResults = results.map((item) => {
-          const latest = data.scores[item.id];
-          if (latest) {
-            const hasScoreChange = latest.total_score !== item.total_score || latest.tier !== item.tier;
-            const hasServiceChange = latest.matched_services_count !== item.matched_services_count;
-            if (hasScoreChange || hasServiceChange || !item.matched_service_names) {
-              changed = true;
-              return {
-                ...item,
-                total_score: latest.total_score,
-                tier: latest.tier,
-                matched_services_count: latest.matched_services_count,
-                matched_service_names: latest.matched_service_names,
-                matched_service_names_en: latest.matched_service_names_en,
-              };
-            }
+        if (!data || !data.scores) return;
+        const scoreMap: Record<
+          string,
+          { total_score?: number | null; matched_services_count?: number | null; matched_service_names?: string[]; matched_service_names_en?: string[] }
+        > = data.scores;
+        let hasChanges = false;
+        const nextResults = results.map((r) => {
+          const synced = scoreMap[r.id];
+          if (!synced) return r;
+          if (
+            synced.total_score !== r.total_score ||
+            synced.matched_services_count !== r.matched_services_count ||
+            (synced.matched_service_names && JSON.stringify(synced.matched_service_names) !== JSON.stringify(r.matched_service_names))
+          ) {
+            hasChanges = true;
+            return {
+              ...r,
+              total_score: synced.total_score ?? r.total_score,
+              matched_services_count: synced.matched_services_count ?? r.matched_services_count,
+              matched_service_names: synced.matched_service_names ?? r.matched_service_names,
+              matched_service_names_en: synced.matched_service_names_en ?? r.matched_service_names_en,
+            };
           }
-          return item;
+          return r;
         });
 
-        if (changed) {
-          update({ results: updatedResults });
+        if (hasChanges) {
+          update({ results: nextResults });
         }
       })
-      .catch((err) => {
-        console.warn("[radar] Failed to sync batch scores:", err);
-      });
+      .catch((e) => console.warn("Failed to sync scores from SQLite:", e));
   }, [hydrated]);
 
-  // ───────── Multi-Select & Batch Actions State ─────────
+  // ───────── Multi-Selection for Bulk Actions (Export & Add to List) ─────────
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
-  const [excludeSavedInLists, setExcludeSavedInLists] = React.useState<boolean>(true);
+  const [lastSelectedId, setLastSelectedId] = React.useState<string | null>(null);
+
+  // Bulk Add to List Modal State
+  const [isBulkListModalOpen, setIsBulkListModalOpen] = React.useState(false);
+  const [userLists, setUserLists] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [selectedTargetListId, setSelectedTargetListId] = React.useState<string>("");
+  const [newListName, setNewListName] = React.useState("");
+  const [isSavingBulk, setIsSavingBulk] = React.useState(false);
+  const [bulkSaveSuccess, setBulkSaveSuccess] = React.useState(false);
+
+  // Exclude saved in lists toggle state
+  const [excludeSavedInLists, setExcludeSavedInLists] = React.useState<boolean>(false);
   const [omittedInListsCount, setOmittedInListsCount] = React.useState<number>(0);
 
-  // Send to list dialog state
-  const [isListModalOpen, setIsListModalOpen] = React.useState<boolean>(false);
-  const [availableLists, setAvailableLists] = React.useState<Array<{ id: string; name: string; color: string; description: string | null }>>([]);
-  const [loadingLists, setLoadingLists] = React.useState<boolean>(false);
-  const [targetListId, setTargetListId] = React.useState<string>("");
-  const [isCreatingInlineList, setIsCreatingInlineList] = React.useState<boolean>(false);
-  const [newListName, setNewListName] = React.useState<string>("");
-  const [newListColor, setNewListColor] = React.useState<string>("sky");
-  const [batchActionLoading, setBatchActionLoading] = React.useState<boolean>(false);
-  const [batchSuccessMsg, setBatchSuccessMsg] = React.useState<string | null>(null);
-
-  // Multi-select handlers with Shift+Click Range Selection support
-  const lastSelectedIdRef = React.useRef<string | null>(null);
-
-  const toggleSelect = (id: string, shiftKey: boolean = false) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      const isCurrentlySelected = next.has(id);
-
-      if (shiftKey && lastSelectedIdRef.current && lastSelectedIdRef.current !== id) {
-        const currentList = paginatedResults;
-        const fromIdx = currentList.findIndex((r) => r.id === lastSelectedIdRef.current);
-        const toIdx = currentList.findIndex((r) => r.id === id);
-
-        if (fromIdx !== -1 && toIdx !== -1) {
-          const [start, end] = fromIdx < toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
-          const range = currentList.slice(start, end + 1);
-          const shouldCheck = !isCurrentlySelected;
-          range.forEach((item) => {
-            if (shouldCheck) next.add(item.id);
-            else next.delete(item.id);
-          });
-          lastSelectedIdRef.current = id;
-          return next;
-        }
-      }
-
-      if (isCurrentlySelected) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      lastSelectedIdRef.current = id;
-      return next;
-    });
-  };
-
-  const selectAllFiltered = () => {
-    setSelectedIds(new Set(filteredResults.map((r) => r.id)));
-  };
-
-  const clearSelection = () => {
-    setSelectedIds(new Set());
-    lastSelectedIdRef.current = null;
-  };
-
-  // Open list modal & fetch lists
-  const openSendToListModal = async () => {
-    if (selectedIds.size === 0) return;
-    setIsListModalOpen(true);
-    setLoadingLists(true);
+  // Fetch user lists when opening the bulk modal
+  const openBulkListModal = async () => {
+    setIsBulkListModalOpen(true);
+    setBulkSaveSuccess(false);
     try {
       const res = await fetch("/api/lists");
-      const data = await res.json();
-      const lists = data.lists ?? [];
-      setAvailableLists(lists);
-      if (lists.length > 0 && !targetListId) {
-        setTargetListId(lists[0].id);
+      if (res.ok) {
+        const data = await res.json();
+        setUserLists(data.lists || []);
+        if (data.lists && data.lists.length > 0) {
+          setSelectedTargetListId(data.lists[0].id);
+        }
       }
-    } catch (err) {
-      console.error("Failed to load lists:", err);
-    } finally {
-      setLoadingLists(false);
+    } catch {
+      /* ignore */
     }
   };
 
-  // Submit batch add to list
-  const handleBatchAddToList = async () => {
-    let finalTargetListId = targetListId;
+  const handleBulkAddToList = async () => {
+    if (selectedIds.size === 0) return;
+    setIsSavingBulk(true);
+    try {
+      let targetListId = selectedTargetListId;
 
-    if (isCreatingInlineList) {
-      if (!newListName.trim()) return;
-      setBatchActionLoading(true);
-      try {
+      if (targetListId === "NEW") {
+        if (!newListName.trim()) {
+          setIsSavingBulk(false);
+          return;
+        }
         const createRes = await fetch("/api/lists", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: newListName.trim(), color: newListColor }),
+          body: JSON.stringify({ name: newListName.trim() }),
         });
+        if (!createRes.ok) throw new Error("Error al crear la nueva lista");
         const createData = await createRes.json();
-        if (!createRes.ok || !createData.list) {
-          throw new Error(createData.error || "Error al crear la lista");
-        }
-        finalTargetListId = createData.list.id;
-        setAvailableLists((prev) => [createData.list, ...prev]);
-        setTargetListId(createData.list.id);
-        setIsCreatingInlineList(false);
-        setNewListName("");
-      } catch (err: any) {
-        setError(err.message || "Error al crear lista");
-        setBatchActionLoading(false);
-        return;
+        targetListId = createData.list?.id || createData.id;
       }
-    }
 
-    if (!finalTargetListId) return;
+      const selectedBusinesses = results.filter((r) => selectedIds.has(r.id));
+      const payloadItems = selectedBusinesses.map((b) => ({
+        businessId: b.id,
+        name: b.name,
+        address: b.address || "",
+        city: b.city || "",
+        phone: b.phone || "",
+        website: b.website || "",
+        rating: b.rating ?? null,
+        reviewCount: b.review_count ?? null,
+        totalScore: b.total_score ?? null,
+        matchedServicesCount: b.matched_services_count ?? 1,
+        lat: b.lat ?? null,
+        lng: b.lng ?? null,
+        categories: b.primary_type ? [b.primary_type] : [],
+      }));
 
-    setBatchActionLoading(true);
-    try {
-      const businessIds = Array.from(selectedIds);
-      const res = await fetch(`/api/lists/${finalTargetListId}/items/batch`, {
+      const batchRes = await fetch(`/api/lists/${targetListId}/items/batch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessIds }),
+        body: JSON.stringify({ items: payloadItems }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Error al agregar a la lista");
+
+      if (!batchRes.ok) {
+        throw new Error("Error en la inserción masiva en la lista");
       }
 
-      const count = data.addedCount ?? businessIds.length;
-      const targetListObj = availableLists.find((l) => l.id === finalTargetListId);
-      const listName = targetListObj ? targetListObj.name : data.listName || "Lista";
-      setBatchSuccessMsg(`✅ ${count} negocios agregados a "${listName}"`);
-
-      // If excludeSavedInLists is active, remove saved items from current radar results
-      if (excludeSavedInLists) {
-        const idSet = new Set(businessIds);
-        const remaining = results.filter((r) => !idSet.has(r.id));
-        update({
-          results: remaining,
-          totalFound: remaining.length,
-        });
-        setOmittedInListsCount((prev) => prev + count);
-      }
-
-      setSelectedIds(new Set());
-      setIsListModalOpen(false);
-
+      setBulkSaveSuccess(true);
       setTimeout(() => {
-        setBatchSuccessMsg(null);
-      }, 4000);
+        setIsBulkListModalOpen(false);
+        setBulkSaveSuccess(false);
+        setSelectedIds(new Set());
+      }, 1500);
     } catch (err: any) {
-      setError(err.message || "Error en guardado masivo");
+      alert(err.message || "Error al guardar negocios");
     } finally {
-      setBatchActionLoading(false);
+      setIsSavingBulk(false);
     }
   };
 
-  // Submit batch add to CRM
-  const handleBatchAddToCrm = async () => {
-    if (selectedIds.size === 0) return;
-    setBatchActionLoading(true);
-    try {
-      const business_ids = Array.from(selectedIds);
-      const res = await fetch("/api/crm/move", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ business_ids, stage: "lead" }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al mover al CRM");
-
-      setBatchSuccessMsg(`🚀 ${data.movedCount ?? business_ids.length} negocios agregados al Pipeline CRM como Nuevos Leads`);
-      setSelectedIds(new Set());
-
-      setTimeout(() => {
-        setBatchSuccessMsg(null);
-      }, 4000);
-    } catch (err: any) {
-      setError(err.message || "Error al mover al CRM");
-    } finally {
-      setBatchActionLoading(false);
-    }
-  };
-
-  const handleSort = React.useCallback(
-    (column: SortKey) => {
-      if (sortBy === column) {
-        // Toggle strictly between asc and desc (2 states only)
-        setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
-      } else {
-        setSortBy(column);
-        if (column === "score" || column === "rating") {
-          setSortDir("desc");
-        } else {
-          setSortDir("asc");
-        }
-      }
-    },
-    [sortBy]
-  );
-
-  // AbortController for cancelling in-flight searches
   const searchAbortRef = React.useRef<AbortController | null>(null);
 
   const handleCancelSearch = React.useCallback(
@@ -701,7 +898,6 @@ function getBusinessCategory(
     }
     if (!canSearch) return;
 
-    // Validation: if a city was typed, verify it contains alphanumeric characters
     const trimmedCity = city.trim();
     if (trimmedCity.length > 0) {
       const hasValidText = /[a-zA-Z0-9]/.test(trimmedCity);
@@ -716,6 +912,8 @@ function getBusinessCategory(
     setLoading(true);
     setError(null);
     setSelectedIds(new Set());
+    // Automatically collapse filter panel when search begins
+    setIsFilterCollapsed(true);
     update({ searched: true, selectedBusinessId: null });
 
     try {
@@ -752,7 +950,6 @@ function getBusinessCategory(
       }
     } catch (err: any) {
       if (err.name === "AbortError") {
-        // User cancelled search — gracefully return to idle
         return;
       }
       setError(err.message ?? "Error desconocido");
@@ -785,85 +982,98 @@ function getBusinessCategory(
   // ───────── Filter results by selected Score Tiers ─────────
   const filteredResults = React.useMemo(() => {
     if (selectedTiers.length === 0) return results;
+
     return results.filter((r) => {
       const score = r.total_score;
-      if (score == null) return false;
-      let tier: ScoreTier;
-      if (score >= 75) tier = "hot";
-      else if (score >= 60) tier = "warm";
-      else if (score >= 40) tier = "nurture";
-      else tier = "skip";
-      return selectedTiers.includes(tier);
+      if (score == null) return selectedTiers.includes("skip");
+      if (score >= 75) return selectedTiers.includes("hot");
+      if (score >= 60) return selectedTiers.includes("warm");
+      if (score >= 40) return selectedTiers.includes("nurture");
+      return selectedTiers.includes("skip");
     });
   }, [results, selectedTiers]);
 
-  // Map the filtered search results into BusinessMarker shape for the map
-  const mapMarkers: BusinessMarker[] = React.useMemo(() => {
-    return filteredResults
-      .filter((r) => r.lat != null && r.lng != null)
-      .map((r) => ({
-        id: r.id,
-        name: r.name,
-        lat: r.lat!,
-        lng: r.lng!,
-        category: r.primary_type,
-        rating: r.rating,
-        reviewCount: r.review_count,
-        address: r.address,
-        phone: r.phone,
-        website: r.website,
-        distanceMiles: r.distance_miles,
-        totalScore: r.total_score,
-        tier: r.tier,
-      }));
-  }, [filteredResults]);
+  // ───────── Pre-calculate City & Category display once per result set (O(1) lookups) ─────────
+  const businessDisplayCache = React.useMemo(() => {
+    const cityMap = new Map<string, string>();
+    const catMap = new Map<string, string>();
+    for (const r of results) {
+      cityMap.set(r.id, getBusinessCity(r));
+      catMap.set(r.id, getBusinessCategory(r, selectedCategoryIds, locale === "en" ? "en" : "es"));
+    }
+    return { cityMap, catMap };
+  }, [results, selectedCategoryIds, locale]);
 
-  // Sort the table view of the filtered results.
+  // ───────── Sorting Logic (O(N) Pre-Keyed Array Sort) ─────────
+  const handleSort = (column: SortKey) => {
+    if (sortBy === column) {
+      if (sortDir === "desc") {
+        setSortDir("asc");
+      } else {
+        setSortBy(null);
+        setSortDir("desc");
+      }
+    } else {
+      setSortBy(column);
+      setSortDir(column === "score" || column === "services" || column === "rating" ? "desc" : "asc");
+    }
+  };
+
   const sortedResults = React.useMemo(() => {
     if (!sortBy) return filteredResults;
-    const dir = sortDir === "asc" ? 1 : -1;
 
-    const getKey = (r: SearchResult): string | number | null => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    const keyMap = new Map<string, any>();
+
+    for (const r of filteredResults) {
       switch (sortBy) {
         case "score":
-          return typeof r.total_score === "number" ? r.total_score : null;
-        case "services":
-          return typeof r.matched_services_count === "number"
-            ? r.matched_services_count
-            : (r.total_score && r.total_score >= 75 ? 3 : r.total_score && r.total_score >= 60 ? 2 : 1);
+          keyMap.set(r.id, r.total_score ?? -1);
+          break;
+        case "services": {
+          const count =
+            r.matched_services_count != null
+              ? r.matched_services_count
+              : r.total_score != null
+              ? r.total_score >= 75
+                ? 3
+                : r.total_score >= 60
+                ? 2
+                : 1
+              : 2;
+          keyMap.set(r.id, count);
+          break;
+        }
         case "name":
-          return r.name ? r.name.trim().toLowerCase() : null;
+          keyMap.set(r.id, (r.name || "").toLowerCase());
+          break;
         case "category":
-          return getBusinessCategory(r, selectedCategoryIds, locale).toLowerCase();
+          keyMap.set(r.id, (businessDisplayCache.catMap.get(r.id) || "").toLowerCase());
+          break;
         case "city":
-          return getBusinessCity(r).toLowerCase();
-        case "address":
-          return r.address ? r.address.trim().toLowerCase() : null;
-        case "phone":
-          return r.phone ? r.phone.replace(/\D/g, "") : null;
-        case "web":
-          return r.website ? r.website.trim().toLowerCase() : null;
+          keyMap.set(r.id, (businessDisplayCache.cityMap.get(r.id) || "").toLowerCase());
+          break;
         case "rating":
-          return typeof r.rating === "number" ? r.rating : 0;
+          keyMap.set(r.id, r.rating ?? -1);
+          break;
         case "distance":
-          return typeof r.distance_miles === "number" ? r.distance_miles : null;
+          keyMap.set(r.id, r.distance_miles ?? 999999);
+          break;
         default:
-          return null;
+          keyMap.set(r.id, null);
       }
-    };
+    }
 
     return [...filteredResults].sort((a, b) => {
-      const ka = getKey(a);
-      const kb = getKey(b);
+      const ka = keyMap.get(a.id);
+      const kb = keyMap.get(b.id);
 
-      // Nulls/undefined sort to the bottom
       if (ka == null && kb == null) return 0;
       if (ka == null) return 1;
       if (kb == null) return -1;
 
       if (typeof ka === "number" && typeof kb === "number") {
         if (ka === kb) {
-          // Secondary tie-breaker by total_score desc, then review_count
           const scoreA = a.total_score ?? 0;
           const scoreB = b.total_score ?? 0;
           if (scoreA !== scoreB) return scoreB - scoreA;
@@ -880,7 +1090,13 @@ function getBusinessCategory(
 
       return 0;
     });
-  }, [filteredResults, sortBy, sortDir]);
+  }, [filteredResults, sortBy, sortDir, businessDisplayCache]);
+
+  const handleSelectRow = React.useCallback((id: string) => {
+    update({ selectedBusinessId: id });
+    setFocusTick(Date.now());
+    setExpandedRowId((prev) => (prev === id ? null : id));
+  }, [update]);
 
   // ───────── Pagination (Fixed 14 Businesses Per Page) ─────────
   const PAGE_SIZE = 14;
@@ -899,19 +1115,18 @@ function getBusinessCategory(
     return sortedResults.slice(startIndex, startIndex + pageSize);
   }, [sortedResults, safePage]);
 
-  // Auto-Focus & Auto-Pagination when clicking a business marker on the map
+  // Auto-Focus, Auto-Pagination & Auto-Expand when clicking a business marker on the map
   const handleSelectBusinessFromMap = React.useCallback(
     (id: string) => {
       update({ selectedBusinessId: id });
       setFocusTick(Date.now());
+      setExpandedRowId(id);
 
-      // Auto-paginate to the exact page where this business resides
       const targetIndex = sortedResults.findIndex((r) => r.id === id);
       if (targetIndex !== -1) {
         const targetPage = Math.floor(targetIndex / pageSize) + 1;
         setCurrentPage(targetPage);
 
-        // Smoothly scroll the table row into view
         setTimeout(() => {
           const rowEl = document.getElementById(`biz-row-${id}`);
           if (rowEl) {
@@ -923,15 +1138,89 @@ function getBusinessCategory(
     [sortedResults, pageSize, update]
   );
 
+  // Checkbox multi-selection handlers
+  const toggleSelect = React.useCallback(
+    (id: string, shiftKey: boolean = false) => {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (shiftKey && lastSelectedId && lastSelectedId !== id) {
+          const list = sortedResults;
+          const idxA = list.findIndex((r) => r.id === lastSelectedId);
+          const idxB = list.findIndex((r) => r.id === id);
+          if (idxA !== -1 && idxB !== -1) {
+            const start = Math.min(idxA, idxB);
+            const end = Math.max(idxA, idxB);
+            for (let i = start; i <= end; i++) {
+              next.add(list[i].id);
+            }
+            return next;
+          }
+        }
+
+        if (next.has(id)) {
+          next.delete(id);
+        } else {
+          next.add(id);
+        }
+        return next;
+      });
+      setLastSelectedId(id);
+    },
+    [sortedResults, lastSelectedId]
+  );
+
+  const toggleSelectAll = React.useCallback(() => {
+    const pageIds = paginatedResults.map((r) => r.id);
+    const allPageSelected = pageIds.every((id) => selectedIds.has(id));
+
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allPageSelected) {
+        pageIds.forEach((id) => next.delete(id));
+      } else {
+        pageIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  }, [paginatedResults, selectedIds]);
+
+  const selectEntireSearchResult = React.useCallback(() => {
+    const allIds = sortedResults.map((r) => r.id);
+    setSelectedIds(new Set(allIds));
+  }, [sortedResults]);
+
+  const clearSelection = React.useCallback(() => {
+    setSelectedIds(new Set());
+    setLastSelectedId(null);
+  }, []);
+
+  const mapMarkers: BusinessMarker[] = React.useMemo(() => {
+    return results
+      .filter((r) => r.lat != null && r.lng != null)
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        lat: r.lat!,
+        lng: r.lng!,
+        rating: r.rating ?? undefined,
+        reviewCount: r.review_count ?? undefined,
+        address: r.address || undefined,
+        phone: r.phone || undefined,
+        website: r.website || undefined,
+        totalScore: r.total_score ?? undefined,
+        matchedServicesCount: r.matched_services_count ?? undefined,
+      }));
+  }, [results]);
+
   return (
     <div className="p-1.5 sm:p-2 md:p-2.5 space-y-1.5 max-w-[1900px] w-full mx-auto flex flex-col min-h-0 lg:h-[calc(100vh-3.6rem)] lg:overflow-hidden">
         {/* Error banner */}
         {error && (
           <Card className="border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/5 shrink-0">
-            <CardContent className="py-1.5 px-3 text-xs text-red-800 dark:text-red-300 flex items-start justify-between gap-2 font-medium">
+            <CardContent className="py-2.5 px-3 text-red-700 dark:text-red-300 text-sm flex items-center justify-between">
               <span>
-                ⚠️ {error}
-                {error.includes("Google Places") && (
+                <strong>{t("common.error", "Error:")}</strong> {error}
+                {(error.includes("GOOGLE_PLACES_API_KEY") || error.includes("GEOAPIFY_API_KEY") || error.includes("API key")) && (
                   <span className="block mt-0.5 text-xs text-red-700 dark:text-red-400">
                     → Configura tu API key en <a href="/tools" className="underline font-semibold">/tools</a>
                   </span>
@@ -939,7 +1228,7 @@ function getBusinessCategory(
               </span>
               <button
                 onClick={() => setError(null)}
-                className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-200 text-base leading-none"
+                className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-200 text-base leading-none cursor-pointer"
                 aria-label="Cerrar"
               >
                 ✕
@@ -965,8 +1254,8 @@ function getBusinessCategory(
                     <span>{t("radar.restoredResults", { count: results.length }, `Restaurada (${results.length} resultados)`)}</span>
                     <button
                       type="button"
-                      onClick={clear}
-                      className="ml-1 hover:text-sky-950 dark:hover:text-white underline underline-offset-2 text-[10px] text-sky-600 dark:text-sky-400 font-semibold"
+                      onClick={handleClearFilters}
+                      className="ml-1 hover:text-sky-950 dark:hover:text-white underline underline-offset-2 text-[10px] text-sky-600 dark:text-sky-400 font-semibold cursor-pointer"
                       title={t("radar.clearFilters", "Limpiar filtros")}
                     >
                       {t("common.clear", "Limpiar")}
@@ -1015,8 +1304,8 @@ function getBusinessCategory(
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={clear}
-                  className="text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:underline underline-offset-2 transition-colors font-medium px-1.5 py-0.5"
+                  onClick={handleClearFilters}
+                  className="text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:underline underline-offset-2 transition-colors font-medium px-1.5 py-0.5 cursor-pointer"
                 >
                   {t("radar.clearFilters", "Limpiar filtros")}
                 </button>
@@ -1027,7 +1316,7 @@ function getBusinessCategory(
                     type="button"
                     onClick={handleSearch}
                     disabled={loading}
-                    className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold h-7 px-3 text-xs shadow-xs transition-all"
+                    className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold h-7 px-3 text-xs shadow-xs transition-all cursor-pointer"
                   >
                     {loading ? (
                       <span className="inline-flex items-center gap-1">
@@ -1046,7 +1335,7 @@ function getBusinessCategory(
                 <button
                   type="button"
                   onClick={toggleFilterCollapsed}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-slate-200 dark:border-white/10"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-slate-200 dark:border-white/10 cursor-pointer"
                   aria-expanded={!isFilterCollapsed}
                 >
                   <span>{isFilterCollapsed ? t("radar.expandFilters", "Desplegar filtros") : t("radar.collapseFilters", "Plegar filtros")}</span>
@@ -1071,125 +1360,121 @@ function getBusinessCategory(
                         update({
                           origin: { lat, lng },
                           city: displayName,
-                          ...(typeof suggestedRadius === "number"
-                            ? { radiusMiles: suggestedRadius }
-                            : {}),
+                          radiusMiles: suggestedRadius || radiusMiles,
                         })
                       }
-                      placeholder={t("radar.cityPlaceholder", "Ciudad, dirección o lugar...")}
+                      placeholder={t("radar.locationPlaceholder", "Ciudad, CP o dirección...")}
                     />
                   </div>
 
-                  {/* 2. Categoría (4 cols) */}
+                  {/* 2. Categorías (4 cols) */}
                   <div className="lg:col-span-4 space-y-1">
-                    <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      {t("radar.categoryLabel", "Categoría")}
-                    </Label>
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        {t("radar.categoriesLabel", "Categorías")}
+                      </Label>
+                      {selectedCategoryIds.length > 0 && (
+                        <span className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                          {selectedCategoryIds.length} {t("common.selectedCount", "seleccionadas")}
+                        </span>
+                      )}
+                    </div>
                     <CategoryMultiSelect
-                      value={selectedCategoryIds}
-                      onChange={(v) => update({ selectedCategoryIds: v })}
+                      value={hydrated ? selectedCategoryIds : []}
+                      onChange={(ids) => update({ selectedCategoryIds: ids })}
                     />
                   </div>
 
-                  {/* 3. Búsqueda personalizada (2 cols) */}
-                  <div className="lg:col-span-2 space-y-1">
+                  {/* 3. Término de búsqueda libre (3 cols) */}
+                  <div className="lg:col-span-3 space-y-1">
                     <Label htmlFor="query" className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      {t("radar.customSearchLabel", "Búsqueda personalizada")}
-                      <span className="ml-1 text-slate-400 font-normal text-[11px]">{t("radar.optional", "(opcional)")}</span>
+                      {t("radar.freeQueryLabel", "Término libre")}
                     </Label>
                     <Input
                       id="query"
-                      placeholder={t("radar.customSearchPlaceholder", "ej. 'abierto 24/7'")}
-                      value={query}
+                      value={hydrated ? query : ""}
                       onChange={(e) => update({ query: e.target.value })}
-                      className="h-9 text-xs"
+                      placeholder={t("radar.freeQueryPlaceholder", "ej: dental, roof, pizza...")}
+                      className="h-8 text-xs border-slate-200 dark:border-white/10"
                     />
                   </div>
 
-                  {/* 4. Limitar máx. & Botones de Acción (3 cols) */}
-                  <div className="lg:col-span-3 space-y-2">
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <label
-                          htmlFor="toggleMaxResults"
-                          className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-[11px] cursor-pointer select-none"
-                        >
-                          <input
-                            id="toggleMaxResults"
-                            type="checkbox"
-                            checked={maxResults !== null}
-                            onChange={(e) =>
-                              update({ maxResults: e.target.checked ? 20 : null })
-                            }
-                            className="rounded border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sky-600 focus:ring-0 focus:ring-offset-0 h-3.5 w-3.5 accent-sky-500"
-                          />
-                          <span className="text-slate-700 dark:text-slate-300 font-medium">{t("radar.limitMax", "Limitar máx.")}</span>
-                        </label>
+                  {/* 4. Radio (1 col) */}
+                  <div className="lg:col-span-1 space-y-1">
+                    <Label htmlFor="radius" className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      {t("radar.radiusLabel", "Radio (mi)")}
+                    </Label>
+                    <Input
+                      id="radius"
+                      type="number"
+                      min={0.5}
+                      max={100}
+                      step={0.5}
+                      value={hydrated ? radiusMiles : 5}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        update({ radiusMiles: isNaN(val) ? 5 : val });
+                      }}
+                      className="h-8 text-xs font-mono border-slate-200 dark:border-white/10"
+                    />
+                  </div>
 
-                        {maxResults !== null ? (
-                          <div className="flex items-center gap-1 font-mono text-[11px]">
-                            <input
-                              type="number"
-                              min="1"
-                              max="200"
-                              value={maxResults}
-                              onChange={(e) => {
-                                const val = parseInt(e.target.value, 10);
-                                update({
-                                  maxResults: isNaN(val) ? 1 : Math.max(1, Math.min(200, val)),
-                                });
-                              }}
-                              className="w-12 h-5 px-1 text-center bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:border-sky-500 rounded text-slate-900 dark:text-slate-200 font-mono text-[11px] focus:outline-none"
-                              title="Escribe una cantidad personalizada de resultados"
-                            />
-                            <span className="text-slate-600 dark:text-slate-400 text-[10px]">{t("common.businesses", "negocios")}</span>
-                          </div>
-                        ) : (
-                          <span className="font-mono text-slate-500 dark:text-slate-400 text-[10px]">
-                            {t("radar.noLimit", "⚡ Sin límite (Todos)")}
-                          </span>
-                        )}
-                      </div>
+                  {/* 5. Cantidad Máxima (1 col) */}
+                  <div className="lg:col-span-1 space-y-1">
+                    <Label htmlFor="maxResults" className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate" title="Límite de negocios">
+                      {t("radar.maxResultsLabel", "Límite")}
+                    </Label>
+                    <select
+                      id="maxResults"
+                      value={hydrated ? (maxResults ?? 0) : 0}
+                      onChange={(e) => update({ maxResults: Number(e.target.value) })}
+                      className="w-full h-8 text-xs font-mono rounded-md border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 px-2 text-slate-900 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                    >
+                      <option value={0}>{t("radar.maxResultsOptionAll", "Todos")}</option>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+                </div>
 
-                      {maxResults !== null && (
-                        <div className="space-y-0.5">
-                          <input
-                            id="maxResults"
-                            type="range"
-                            min="5"
-                            max="100"
-                            value={Math.min(100, maxResults)}
-                            onChange={(e) =>
-                              update({ maxResults: parseInt(e.target.value, 10) })
-                            }
-                            className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full appearance-none cursor-pointer accent-sky-500"
-                          />
-                        </div>
-                      )}
-                    </div>
+                {/* Submit row */}
+                <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100 dark:border-white/5">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setExcludeSavedInLists((prev) => !prev)}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-colors cursor-pointer ${
+                        excludeSavedInLists
+                          ? "bg-amber-50 border-amber-300 text-amber-900 dark:bg-amber-500/20 dark:border-amber-500/40 dark:text-amber-200 shadow-2xs font-bold"
+                          : "bg-slate-100/70 border-slate-200 text-slate-600 dark:bg-slate-800/60 dark:border-white/10 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                      }`}
+                      title="Omite automáticamente los negocios que ya guardaste en cualquiera de tus listas para ahorrar llamadas a la API"
+                    >
+                      <span>{excludeSavedInLists ? "🚫" : "📋"}</span>
+                      <span>{excludeSavedInLists ? t("radar.excludeInListsActive", "Ocultando negocios ya en listas") : t("radar.excludeInListsInactive", "Ocultar en listas")}</span>
+                    </button>
+                  </div>
 
-                    <div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="submit"
+                      disabled={loading}
+                      className="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold h-8 px-4 text-xs shadow-xs transition-all cursor-pointer"
+                    >
                       {loading ? (
-                        <Button
-                          type="button"
-                          onClick={handleCancelSearch}
-                          size="default"
-                          className="w-full bg-rose-600/90 hover:bg-rose-600 text-white font-semibold border border-rose-500/50 shadow-md shadow-rose-600/25 transition-all text-xs h-9"
-                          title={t("radar.cancelSearch", "Cancelar búsqueda")}
-                        >
-                          <span className="inline-block w-2 h-2 bg-white rounded-xs mr-1.5 animate-pulse" />
-                          {t("radar.cancelSearch", "✕ Cancelar búsqueda")}
-                        </Button>
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>{t("radar.searchingPlaces", "Buscando...")}</span>
+                        </span>
                       ) : (
-                        <Button
-                          type="submit"
-                          size="default"
-                          className="w-full bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-semibold shadow-md shadow-orange-500/20 text-xs h-9"
-                        >
-                          {t("radar.searchOnMap", "🔍 Buscar en el mapa")}
-                        </Button>
+                        <span className="inline-flex items-center gap-1.5">
+                          <span>⚡</span>
+                          <span>{t("radar.searchButton", "Buscar")}</span>
+                        </span>
                       )}
-                    </div>
+                    </Button>
                   </div>
                 </div>
               </form>
@@ -1209,7 +1494,7 @@ function getBusinessCategory(
                   update({ radiusMiles: metersToMiles(m) })
                 }
                 businesses={mapMarkers}
-                selectedId={effectiveSelectedId}
+                selectedId={selectedBusinessId}
                 focusedBusinessId={selectedBusinessId ? `${selectedBusinessId}::${focusTick}` : null}
                 onCenterChange={(lat, lng) => update({ origin: { lat, lng } })}
                 onSelectBusiness={handleSelectBusinessFromMap}
@@ -1223,991 +1508,388 @@ function getBusinessCategory(
               <Card className="flex-1 flex items-center justify-center border-slate-200 dark:border-white/10 shadow-xs bg-white/80 dark:bg-slate-900/60 backdrop-blur-xs">
                 <CardContent className="py-10 text-center">
                   <div className="inline-block w-6 h-6 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />
-                  <p className="mt-2 text-sm text-slate-400">
-                    {t("radar.searchingPlaces", "Buscando en Google Places...")}
+                  <p className="mt-2 text-xs font-semibold text-slate-700 dark:text-slate-200">{t("radar.searchingPlaces", "Buscando negocios en el área...")}</p>
+                </CardContent>
+              </Card>
+            )}
+
+            {!loading && hydrated && searched && results.length === 0 && (
+              <Card className="flex-1 flex items-center justify-center border-slate-200 dark:border-white/10 shadow-xs bg-white/80 dark:bg-slate-900/60 backdrop-blur-xs">
+                <CardContent className="py-10 text-center">
+                  <span className="text-3xl">🔭</span>
+                  <p className="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-200">{t("radar.noResultsTitle", "No encontramos negocios con estos filtros")}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
+                    {t("radar.noResultsSubtitle", "Probá ampliando el radio de búsqueda o quitando filtros específicos.")}
                   </p>
                 </CardContent>
               </Card>
             )}
 
-            {!loading && searched && results.length === 0 && !error && (
+            {!loading && (!searched || results.length === 0) && !hydrated && (
               <Card className="flex-1 flex items-center justify-center border-slate-200 dark:border-white/10 shadow-xs bg-white/80 dark:bg-slate-900/60 backdrop-blur-xs">
                 <CardContent className="py-10 text-center">
-                  <div className="text-3xl mb-2">🤷</div>
-                  <p className="text-sm text-slate-400">Sin resultados</p>
+                  <span className="text-3xl">📡</span>
+                  <p className="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-200">{t("radar.startSearchTitle", "Iniciá una búsqueda en el radar")}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
+                    {t("radar.startSearchSubtitle", "Elegí una categoría o ubicación para escanear oportunidades con IA.")}
+                  </p>
                 </CardContent>
               </Card>
             )}
 
             {!loading && results.length > 0 && (
-              <Card className="border-slate-200 dark:border-white/10 shadow-xs flex flex-col h-full min-h-0 bg-white/80 dark:bg-slate-900/60 backdrop-blur-xs">
-                <CardContent className="p-2.5 sm:p-3 flex flex-col flex-1 h-full min-h-0 justify-between">
-                  {/* Header with Counter, Live Filter Chips, Sort & Actions in ONE row */}
-                  <div className="flex items-center justify-between mb-2 gap-2 overflow-x-auto no-scrollbar py-0.5 shrink-0">
-                    <div className="flex items-center gap-2 shrink-0">
-                      <p className="text-xs font-medium shrink-0 whitespace-nowrap">
-                        <span className="font-bold text-sky-600 dark:text-sky-400 text-sm">
-                          {filteredResults.length}
+              <Card className="flex-1 flex flex-col min-h-0 border-slate-200 dark:border-white/10 shadow-xs bg-white/90 dark:bg-slate-900/80 backdrop-blur-xs overflow-hidden">
+                <CardContent className="p-0 flex-1 flex flex-col min-h-0">
+                  {/* Results Count & Bulk Action Bar */}
+                  <div className="px-3 py-1.5 border-b border-slate-200 dark:border-white/10 flex items-center justify-between gap-2 flex-wrap bg-slate-50/80 dark:bg-slate-900/80 shrink-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        {totalFound} {t("radar.businessesFound", "negocios encontrados")}
+                      </span>
+                      {selectedIds.size > 0 && (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-sky-100 dark:bg-sky-500/20 text-sky-800 dark:text-sky-300 text-xs font-bold font-mono">
+                          <span>✓ {selectedIds.size}</span>
+                          <span className="text-[10px] font-normal">{t("common.selectedCount", "seleccionados")}</span>
                         </span>
-                        {selectedTiers.length > 0 ? (
-                          <span className="text-slate-500 dark:text-slate-400 text-xs"> {t("radar.filteredFrom", { filtered: filteredResults.length, total: results.length }, `filtrados de ${results.length} encontrados`)}</span>
-                        ) : (
-                          <span className="text-slate-500 dark:text-slate-400 text-xs"> {t("common.of", "de")} <span className="font-mono">{results.length}</span> {t("radar.foundCounter", { total: results.length }, `${results.length} encontrados`)}</span>
-                        )}
-                      </p>
-
-                      <span className="text-slate-300 dark:text-slate-700 select-none">·</span>
-
-                      {/* Live Interactive Score Tier Filter Chips */}
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => toggleTier("hot")}
-                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10.5px] font-bold transition-all select-none whitespace-nowrap ${
-                            selectedTiers.includes("hot")
-                              ? "bg-red-100 border border-red-500 text-red-900 dark:bg-red-500/25 dark:border-red-400 dark:text-red-200 shadow-xs"
-                              : "bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-400 hover:border-red-400 hover:text-red-800 dark:hover:text-red-300"
-                          }`}
-                          title={t("radar.tierHotTooltip", "Filtrar negocios HOT (Score ≥ 75)")}
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                          🔥 HOT <span className="font-mono text-[9.5px] opacity-80 font-normal">({tierCounts.hot})</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => toggleTier("warm")}
-                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10.5px] font-bold transition-all select-none whitespace-nowrap ${
-                            selectedTiers.includes("warm")
-                              ? "bg-emerald-100 border border-emerald-500 text-emerald-900 dark:bg-emerald-500/25 dark:border-emerald-400 dark:text-emerald-200 shadow-xs"
-                              : "bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-400 hover:border-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300"
-                          }`}
-                          title={t("radar.tierWarmTooltip", "Filtrar negocios WARM (Score 60 - 74)")}
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          ⚡ WARM <span className="font-mono text-[9.5px] opacity-80 font-normal">({tierCounts.warm})</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => toggleTier("nurture")}
-                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10.5px] font-bold transition-all select-none whitespace-nowrap ${
-                            selectedTiers.includes("nurture")
-                              ? "bg-orange-100 border border-orange-500 text-orange-900 dark:bg-orange-500/25 dark:border-orange-400 dark:text-orange-200 shadow-xs"
-                              : "bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-400 hover:border-orange-400 hover:text-orange-800 dark:hover:text-orange-300"
-                          }`}
-                          title={t("radar.tierNurtureTooltip", "Filtrar negocios NURTURE (Score 40 - 59)")}
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-                          🌱 NURTURE <span className="font-mono text-[9.5px] opacity-80 font-normal">({tierCounts.nurture})</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => toggleTier("skip")}
-                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10.5px] font-bold transition-all select-none whitespace-nowrap ${
-                            selectedTiers.includes("skip")
-                              ? "bg-yellow-100 border border-yellow-500 text-yellow-900 dark:bg-yellow-500/25 dark:border-yellow-400 dark:text-yellow-200 shadow-xs"
-                              : "bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-400 hover:border-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-300"
-                          }`}
-                          title={t("radar.tierSkipTooltip", "Filtrar negocios SKIP (Score < 40)")}
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
-                          ⚪ SKIP <span className="font-mono text-[9.5px] opacity-80 font-normal">({tierCounts.skip})</span>
-                        </button>
-
-                        {selectedTiers.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setSelectedTiers([])}
-                            className="text-[11px] text-sky-600 dark:text-sky-400 hover:underline underline-offset-2 ml-1 font-semibold whitespace-nowrap"
-                          >
-                            {t("radar.clearTierFilter", "✕ Ver todos")}
-                          </button>
-                        )}
-
-                        <span className="text-slate-300 dark:text-slate-700 select-none">·</span>
-
-                        {/* List Exclusion Filter Toggle */}
-                        <label
-                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10.5px] font-bold transition-all select-none whitespace-nowrap cursor-pointer ${
-                            excludeSavedInLists
-                              ? "bg-slate-100 dark:bg-slate-800 border border-sky-500/50 text-sky-800 dark:text-sky-300 shadow-2xs"
-                              : "bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400"
-                          }`}
-                          title="Excluir de la búsqueda negocios que ya guardaste en cualquiera de tus listas para ahorrar llamadas a la API y prospectar solo leads nuevos"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={excludeSavedInLists}
-                            onChange={(e) => {
-                              setExcludeSavedInLists(e.target.checked);
-                            }}
-                            className="w-3 h-3 rounded border-slate-300 dark:border-slate-700 text-sky-600 focus:ring-sky-500 cursor-pointer accent-sky-500"
-                          />
-                          <span>🚫 Ocultar en listas</span>
-                          {omittedInListsCount > 0 && (
-                            <span className="font-mono text-[9.5px] px-1 py-0.2 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 font-normal">
-                              ({omittedInListsCount} omitidos)
-                            </span>
-                          )}
-                        </label>
-                      </div>
+                      )}
+                      {omittedInListsCount > 0 && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300 text-[11px] font-medium border border-amber-200 dark:border-amber-500/30" title="Negocios omitidos por ya estar guardados en tus listas">
+                          <span>🚫 {omittedInListsCount} {t("radar.omittedCountBadge", "ya en listas")}</span>
+                        </span>
+                      )}
                     </div>
 
-                    <div className="flex items-center gap-2 text-xs shrink-0 whitespace-nowrap">
-                      {sortBy && (
+                    {/* Score Tier Filter Pills */}
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => toggleTier("hot")}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all border cursor-pointer ${
+                          selectedTiers.includes("hot")
+                            ? "bg-red-500 text-white border-red-600 shadow-2xs"
+                            : "bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-300 dark:border-red-500/30 hover:bg-red-100"
+                        }`}
+                        title="Score 75+: Alta urgencia / High ticket"
+                      >
+                        <span>🔥 HOT</span>
+                        <span className="opacity-80 font-mono">({tierCounts.hot})</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => toggleTier("warm")}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all border cursor-pointer ${
+                          selectedTiers.includes("warm")
+                            ? "bg-emerald-500 text-white border-emerald-600 shadow-2xs"
+                            : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/30 hover:bg-emerald-100"
+                        }`}
+                        title="Score 60-74: Lead Caliente / Calificado"
+                      >
+                        <span>⚡ WARM</span>
+                        <span className="opacity-80 font-mono">({tierCounts.warm})</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => toggleTier("nurture")}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all border cursor-pointer ${
+                          selectedTiers.includes("nurture")
+                            ? "bg-orange-500 text-white border-orange-600 shadow-2xs"
+                            : "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/10 dark:text-orange-300 dark:border-orange-500/30 hover:bg-orange-100"
+                        }`}
+                        title="Score 40-59: Lead en nutrición / Oportunidad media"
+                      >
+                        <span>🌱 NURTURE</span>
+                        <span className="opacity-80 font-mono">({tierCounts.nurture})</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => toggleTier("skip")}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all border cursor-pointer ${
+                          selectedTiers.includes("skip")
+                            ? "bg-yellow-500 text-white border-yellow-600 shadow-2xs"
+                            : "bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-500/10 dark:text-yellow-300 dark:border-yellow-500/30 hover:bg-yellow-100"
+                        }`}
+                        title="Score <40: Oportunidad baja / Descartar"
+                      >
+                        <span>⚪ SKIP</span>
+                        <span className="opacity-80 font-mono">({tierCounts.skip})</span>
+                      </button>
+                    </div>
+
+                    {/* Bulk Action Buttons */}
+                    <div className="flex items-center gap-1.5">
+                      {selectedIds.size > 0 ? (
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={openBulkListModal}
+                            className="h-7 px-2.5 text-xs bg-sky-600 hover:bg-sky-700 text-white font-semibold shadow-xs cursor-pointer"
+                          >
+                            <span>📥 {t("radar.saveToListBulk", "Guardar en Lista")} ({selectedIds.size})</span>
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={clearSelection}
+                            className="h-7 px-2 text-xs border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 cursor-pointer"
+                          >
+                            {t("common.clear", "Limpiar")}
+                          </Button>
+                        </>
+                      ) : (
                         <button
-                          onClick={() => {
-                            setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
-                          }}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/30 text-sky-700 dark:text-sky-300 hover:bg-sky-100 transition-colors font-medium text-[11px] whitespace-nowrap"
-                          title="Alternar orden ascendente / descendente"
+                          type="button"
+                          onClick={selectEntireSearchResult}
+                          className="text-[11px] text-sky-600 dark:text-sky-400 hover:underline font-semibold cursor-pointer"
                         >
-                          <span aria-hidden="true">{sortDir === "asc" ? "▲" : "▼"}</span>
-                          <span>
-                            {t(`radar.${sortBy === "name" ? "businessColumn" : sortBy === "category" ? "categoryColumn" : sortBy === "city" ? "cityColumn" : sortBy === "score" ? "scoreColumn" : sortBy === "rating" ? "ratingColumn" : sortBy === "distance" ? "distanceColumn" : "scoreColumn"}`, sortBy)}
-                            <span className="ml-1 text-sky-600 dark:text-sky-400 font-bold">
-                              ({sortDir === "asc" ? t("radar.asc", "Asc") : t("radar.desc", "Desc")})
-                            </span>
-                          </span>
+                          {t("radar.selectAllCount", { count: sortedResults.length }, `Seleccionar todos (${sortedResults.length})`)}
                         </button>
                       )}
                     </div>
                   </div>
 
-                  {/* Batch Success Message Banner */}
-                  {batchSuccessMsg && (
-                    <div className="mb-2 p-2 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center justify-between animate-in fade-in duration-150 shrink-0">
-                      <div className="flex items-center gap-2">
-                        <span>{batchSuccessMsg}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setBatchSuccessMsg(null)}
-                        className="text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-200 text-sm leading-none"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Wide results table with expandable row drawers */}
-                  <div className="overflow-y-auto overflow-x-auto rounded-lg border border-slate-200 dark:border-white/5 flex-1 min-h-0 bg-white dark:bg-slate-950/40 relative">
-                    <table className="w-full text-sm table-fixed">
-                      <colgroup>
-                        <col className="w-[36px]" />
-                        <col className="w-[23%] min-w-[130px]" />
-                        <col className="w-[19%] min-w-[120px]" />
-                        <col className="w-[13%] min-w-[90px]" />
-                        <col className="w-[92px]" />
-                        <col className="w-[104px]" />
-                        <col className="w-[78px]" />
-                        <col className="w-[60px]" />
-                        <col className="w-[88px]" />
-                      </colgroup>
-                      <thead className="sticky top-0 z-20 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-xs text-[11px] uppercase tracking-wide text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-white/10 shadow-2xs">
-                        <tr>
-                          {/* 0. Master Checkbox */}
-                          <th className="sticky top-0 z-30 bg-slate-100 dark:bg-slate-900 text-center py-2 px-1 w-[36px] border-b border-slate-200 dark:border-white/10">
+                  {/* Scrollable Table Viewport */}
+                  <div className="flex-1 overflow-auto min-h-0">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-200 dark:border-white/10">
+                          {/* 0. Bulk Checkbox Column Header */}
+                          <th className="sticky top-0 z-30 bg-slate-100 dark:bg-slate-900 py-2 px-1 text-center w-8 border-b border-slate-200 dark:border-white/10">
                             <input
                               type="checkbox"
                               checked={
                                 paginatedResults.length > 0 &&
                                 paginatedResults.every((r) => selectedIds.has(r.id))
                               }
-                              onChange={() => {
-                                const allSelected =
-                                  paginatedResults.length > 0 &&
-                                  paginatedResults.every((r) => selectedIds.has(r.id));
-                                setSelectedIds((prev) => {
-                                  const next = new Set(prev);
-                                  if (allSelected) {
-                                    paginatedResults.forEach((r) => next.delete(r.id));
-                                  } else {
-                                    paginatedResults.forEach((r) => next.add(r.id));
-                                  }
-                                  return next;
-                                });
-                              }}
+                              onChange={toggleSelectAll}
                               className="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-700 text-sky-600 focus:ring-sky-500 cursor-pointer accent-sky-500"
-                              title="Seleccionar / Deseleccionar todos en esta página"
-                              aria-label="Seleccionar todos en esta página"
+                              aria-label={t("radar.selectAllOnPage", "Seleccionar todos en esta página")}
                             />
                           </th>
-                          {/* Negocio */}
                           <SortableHeader
                             column="name"
-                            label={t("radar.businessColumn", "Negocio")}
+                            label={t("radar.colBusiness", "Negocio")}
                             sortBy={sortBy}
                             sortDir={sortDir}
                             onSort={handleSort}
-                            className="text-left pl-2 pr-2 w-[23%]"
+                            className="pl-2 pr-2 min-w-[140px] max-w-[180px]"
                           />
-                          {/* Categoría */}
                           <SortableHeader
                             column="category"
-                            label={t("radar.categoryColumn", "Categoría")}
+                            label={t("radar.colCategory", "Categoría")}
                             sortBy={sortBy}
                             sortDir={sortDir}
                             onSort={handleSort}
-                            className="text-left px-2 w-[19%]"
+                            className="px-2 min-w-[100px] max-w-[140px]"
                           />
-                          {/* Ciudad */}
                           <SortableHeader
                             column="city"
-                            label={t("radar.cityColumn", "Ciudad")}
+                            label={t("radar.colCity", "Ciudad")}
                             sortBy={sortBy}
                             sortDir={sortDir}
                             onSort={handleSort}
-                            className="text-left px-2 w-[13%]"
+                            className="px-2 min-w-[90px]"
                           />
-                          {/* Score */}
                           <SortableHeader
                             column="score"
-                            label={t("radar.scoreColumn", "Score")}
+                            label={t("radar.colScore", "Score 5D")}
                             sortBy={sortBy}
                             sortDir={sortDir}
                             onSort={handleSort}
-                            className="text-left px-1.5 w-[92px]"
+                            className="px-1.5 min-w-[90px]"
                           />
-                          {/* Servicios IA */}
                           <SortableHeader
                             column="services"
-                            label={t("radar.colServices", "Servicios IA")}
+                            label={t("radar.colAiServices", "Servicios IA")}
                             sortBy={sortBy}
                             sortDir={sortDir}
                             onSort={handleSort}
-                            className="text-center px-1.5 w-[104px]"
+                            className="px-1.5 text-center min-w-[105px]"
                           />
-                          {/* Rating */}
                           <SortableHeader
                             column="rating"
-                            label={t("radar.ratingColumn", "Rating ⭐")}
+                            label={t("radar.colRating", "Rating")}
                             sortBy={sortBy}
                             sortDir={sortDir}
                             onSort={handleSort}
-                            className="text-center px-1 w-[78px]"
+                            className="px-1.5 text-center min-w-[70px]"
                           />
-                          {/* Dist */}
                           <SortableHeader
                             column="distance"
-                            label={t("radar.distanceColumn", "Dist")}
+                            label={t("radar.colDistance", "Dist.")}
                             sortBy={sortBy}
                             sortDir={sortDir}
                             onSort={handleSort}
-                            className="text-right px-1.5 w-[60px]"
+                            className="px-1.5 text-right min-w-[60px]"
                           />
-                          {/* Acción */}
-                          <th className="sticky top-0 z-30 bg-slate-100 dark:bg-slate-900 text-right font-semibold py-2 pl-1.5 pr-2.5 whitespace-nowrap w-[88px] text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-white/10">
-                            {t("radar.actionColumn", "Acción")}
+                          <th className="sticky top-0 z-30 bg-slate-100 dark:bg-slate-900 font-semibold py-2 pl-1.5 pr-2.5 text-right whitespace-nowrap text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-white/10 w-20">
+                            {t("radar.colActions", "Acción")}
                           </th>
                         </tr>
                       </thead>
                       <tbody>
-                        {paginatedResults.map((r) => {
-                          const isSelected = r.id === effectiveSelectedId;
-                          const isExpanded = expandedRowId === r.id;
-                          const isChecked = selectedIds.has(r.id);
-                          const mapsHref = r.lat != null && r.lng != null
-                            ? `https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lng}`
-                            : null;
-                          return (
-                            <React.Fragment key={r.id}>
-                              <tr
-                                id={`biz-row-${r.id}`}
-                                onMouseEnter={() => setHoveredBusinessId(r.id)}
-                                onMouseLeave={() => setHoveredBusinessId(null)}
-                                onClick={() => {
-                                  update({ selectedBusinessId: r.id });
-                                  setFocusTick(Date.now());
-                                }}
-                                className={`border-b border-slate-100 dark:border-white/5 transition-all cursor-pointer ${
-                                  isChecked
-                                    ? "bg-sky-500/10 dark:bg-sky-500/15 border-l-4 border-l-sky-500"
-                                    : isSelected
-                                    ? "bg-orange-500/15 border-l-4 border-l-orange-500 dark:bg-orange-500/20"
-                                    : isExpanded
-                                    ? "bg-slate-50/90 dark:bg-slate-800/60 border-l-4 border-l-sky-500"
-                                    : "hover:bg-slate-50 dark:hover:bg-slate-800/40"
-                                }`}
-                              >
-                                {/* 0. Checkbox Individual */}
-                                <td
-                                  className="py-1.5 px-1 text-center align-middle cursor-pointer"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleSelect(r.id, e.shiftKey);
-                                  }}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      toggleSelect(r.id, e.shiftKey);
-                                    }}
-                                    onChange={() => {
-                                      // Handled by onClick for reliable shiftKey detection
-                                    }}
-                                    className="w-3.5 h-3.5 rounded border-slate-300 dark:border-slate-700 text-sky-600 focus:ring-sky-500 cursor-pointer accent-sky-500"
-                                    aria-label={`Seleccionar ${r.name}`}
-                                  />
-                                </td>
-
-                                {/* 1. Negocio con toggle expandible */}
-                                <td className="py-1.5 pl-2 pr-2 align-middle">
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    <button
-                                      type="button"
-                                      onClick={(e) => toggleRowExpand(r.id, e)}
-                                      className="p-0.5 -ml-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors shrink-0"
-                                      title={isExpanded ? "Plegar detalles de negocio" : "Desplegar detalles de negocio"}
-                                      aria-expanded={isExpanded}
-                                    >
-                                      <span className="inline-block text-[9px] font-mono leading-none transition-transform duration-150">
-                                        {isExpanded ? "▼" : "▶"}
-                                      </span>
-                                    </button>
-                                    <div
-                                      className="font-bold text-slate-900 dark:text-slate-100 truncate text-xs select-text cursor-text"
-                                      title={r.name}
-                                    >
-                                      {r.name}
-                                    </div>
-                                  </div>
-                                </td>
-
-                                {/* 2. Categoría */}
-                                <td className="py-1.5 px-2 align-middle">
-                                  <span
-                                    className="inline-block max-w-full truncate text-[11px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 font-medium"
-                                    title={getBusinessCategory(r, selectedCategoryIds, locale)}
-                                  >
-                                    {getBusinessCategory(r, selectedCategoryIds, locale)}
-                                  </span>
-                                </td>
-
-                                {/* 3. Ciudad */}
-                                <td className="py-1.5 px-2 align-middle">
-                                  <span
-                                    className="inline-flex items-center gap-1 text-xs text-slate-700 dark:text-slate-300 font-medium whitespace-nowrap"
-                                    title={getBusinessCity(r)}
-                                  >
-                                    <span className="text-slate-400 text-[10px] shrink-0">📍</span>
-                                    <span className="truncate">{getBusinessCity(r)}</span>
-                                  </span>
-                                </td>
-
-                                {/* 4. Score */}
-                                <td className="py-1.5 px-1.5 align-middle whitespace-nowrap">
-                                  {r.total_score != null ? (
-                                    <div className="flex items-center gap-1">
-                                      {r.total_score >= 75 ? (
-                                        <span
-                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-red-50 text-red-800 border border-red-200 dark:bg-red-500/15 dark:border-red-500/40 dark:text-red-300 shadow-2xs font-mono"
-                                          title={`Score 5D: ${r.total_score}/100 - HOT: Alta urgencia y ticket alto. Cerrar esta semana.`}
-                                        >
-                                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                                          🔥 {r.total_score} HOT
-                                        </span>
-                                      ) : r.total_score >= 60 ? (
-                                        <span
-                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-500/15 dark:border-emerald-500/40 dark:text-emerald-300 shadow-2xs font-mono"
-                                          title={`Score 5D: ${r.total_score}/100 - WARM: Lead caliente / calificado.`}
-                                        >
-                                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                          ⚡ {r.total_score} WARM
-                                        </span>
-                                      ) : r.total_score >= 40 ? (
-                                        <span
-                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-orange-50 text-orange-800 border border-orange-200 dark:bg-orange-500/15 dark:border-orange-500/40 dark:text-orange-300 shadow-2xs font-mono"
-                                          title={`Score 5D: ${r.total_score}/100 - NURTURE: Oportunidad media / Seguimiento.`}
-                                        >
-                                          <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-                                          🌱 {r.total_score} NURTURE
-                                        </span>
-                                      ) : (
-                                        <span
-                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-50 text-yellow-800 border border-yellow-200 dark:bg-yellow-500/15 dark:border-yellow-500/40 dark:text-yellow-300 shadow-2xs font-mono"
-                                          title={`Score 5D: ${r.total_score}/100 - SKIP: Descartar o baja prioridad.`}
-                                        >
-                                          <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
-                                          ⚪ {r.total_score} SKIP
-                                        </span>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <span className="text-slate-400 text-xs font-mono">-</span>
-                                  )}
-                                </td>
-
-                                {/* 5. Servicios IA a Instalar */}
-                                <td className="py-1.5 px-1.5 align-middle text-center whitespace-nowrap">
-                                  {(() => {
-                                    const count =
-                                      r.matched_services_count != null
-                                        ? r.matched_services_count
-                                        : r.total_score != null
-                                        ? r.total_score >= 75
-                                          ? 3
-                                          : r.total_score >= 60
-                                          ? 2
-                                          : 1
-                                        : 2;
-                                    const names =
-                                      locale === "en" && r.matched_service_names_en && r.matched_service_names_en.length > 0
-                                        ? r.matched_service_names_en
-                                        : r.matched_service_names && r.matched_service_names.length > 0
-                                        ? r.matched_service_names
-                                        : count === 3
-                                        ? [
-                                            locale === "en" ? "24/7 AI Appointment Setter" : "AI Appointment Setter 24/7",
-                                            locale === "en" ? "5★ Review Booster" : "Review Booster 5★",
-                                            locale === "en" ? "Web Lead Magnet Assistant" : "Asistente Web Lead Magnet",
-                                          ]
-                                        : count === 2
-                                        ? [
-                                            locale === "en" ? "5★ Review Booster" : "Review Booster 5★",
-                                            locale === "en" ? "24/7 AI Appointment Setter" : "AI Appointment Setter 24/7",
-                                          ]
-                                        : [
-                                            locale === "en"
-                                              ? "Google Business & Review Booster"
-                                              : "Google Business & Review Booster",
-                                          ];
-                                    return (
-                                      <span
-                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-purple-50 text-purple-800 border border-purple-200 dark:bg-purple-500/15 dark:border-purple-500/30 dark:text-purple-300 shadow-2xs font-mono cursor-help transition-all hover:scale-105"
-                                        title={`${locale === "en" ? "Matched AI Services to install:" : "Servicios IA a instalar:"}\n• ${names.join("\n• ")}`}
-                                      >
-                                        <span>🤖</span>
-                                        <span>
-                                          {count} {count === 1 ? t("radar.serviceSingleBadge", "servicio") : t("radar.servicesBadge", "servicios")}
-                                        </span>
-                                      </span>
-                                    );
-                                  })()}
-                                </td>
-
-                                {/* 6. Rating */}
-                                <td className="py-1.5 px-1 align-middle text-center whitespace-nowrap">
-                                  {r.rating != null ? (
-                                    <div className="inline-flex items-baseline gap-1 text-xs">
-                                      <span className="text-amber-500 font-bold">
-                                        ⭐ {r.rating.toFixed(1)}
-                                      </span>
-                                      {r.review_count != null && (
-                                        <span className="text-[10px] text-slate-500 dark:text-slate-400 tabular-nums">
-                                          ({r.review_count})
-                                        </span>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <span className="text-slate-400 text-xs">—</span>
-                                  )}
-                                </td>
-
-                                {/* 7. Dist */}
-                                <td className="py-1.5 px-1.5 align-middle text-right whitespace-nowrap">
-                                  {r.distance_miles != null ? (
-                                    <span className="font-mono text-[11px] text-sky-700 dark:text-sky-300 tabular-nums font-semibold">
-                                      {r.distance_miles.toFixed(1)} mi
-                                    </span>
-                                  ) : (
-                                    <span className="text-slate-400 text-xs">—</span>
-                                  )}
-                                </td>
-
-                                {/* 8. Acción */}
-                                <td className="py-1.5 pl-1.5 pr-2.5 align-middle text-right whitespace-nowrap">
-                                  <div
-                                    className="inline-flex items-center gap-1 justify-end"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <Link
-                                      href={`/radar/${r.id}`}
-                                      prefetch={true}
-                                      className="inline-flex items-center justify-center rounded-md h-6 px-2 text-[11px] bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-semibold shadow-xs transition-colors"
-                                    >
-                                      {t("radar.viewProfile", "Perfil →")}
-                                    </Link>
-                                    <button
-                                      type="button"
-                                      onClick={(e) => toggleRowExpand(r.id, e)}
-                                      className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                                      title={isExpanded ? t("radar.collapseFilters", "Ocultar detalles") : t("common.viewMore", "Ver más")}
-                                    >
-                                      <span className="text-[10px] font-mono leading-none">
-                                        {isExpanded ? "▲" : "▼"}
-                                      </span>
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-
-                              {/* Expandable Details Drawer */}
-                              {isExpanded && (
-                                <tr className="bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200 dark:border-white/10 animate-in fade-in-50 duration-150">
-                                  <td colSpan={9} className="p-3 pl-8">
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 rounded-lg bg-white dark:bg-slate-950/80 border border-slate-200/80 dark:border-white/10 shadow-xs">
-                                      {/* 1. Ubicación y Dirección */}
-                                      <div className="space-y-1.5 text-xs flex flex-col justify-between">
-                                        <div className="space-y-1">
-                                          <div className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300">
-                                            <span>📍</span>
-                                            <span>{t("radar.locationAndAddress", "Ubicación y Dirección")}</span>
-                                          </div>
-                                          <p className="text-slate-600 dark:text-slate-400 text-[11px] leading-relaxed select-text">
-                                            {r.address || t("radar.noAddress", "Dirección no especificada")}
-                                          </p>
-                                        </div>
-                                        {mapsHref && (
-                                          <a
-                                            href={mapsHref}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-1 text-sky-600 dark:text-sky-400 hover:underline text-[11px] font-medium mt-1"
-                                          >
-                                            <span>{t("common.openGoogleMaps", "Google Maps")}</span>
-                                            <span className="text-[10px]">↗</span>
-                                          </a>
-                                        )}
-                                      </div>
-
-                                      {/* 2. Contacto y Web */}
-                                      <div className="space-y-1 text-xs flex flex-col">
-                                        <div className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300">
-                                          <span>📞</span>
-                                          <span>{t("radar.contactAndWeb", "Contacto y Web")}</span>
-                                        </div>
-                                        <div className="space-y-1.5 text-[11px] pt-0.5">
-                                          {r.phone ? (
-                                            <div className="flex items-center gap-1.5">
-                                              <span className="text-slate-500 dark:text-slate-400 font-medium">{t("radar.phoneLabel", "Teléfono:")}</span>
-                                              <a
-                                                href={`tel:${r.phone}`}
-                                                className="text-sky-600 dark:text-sky-400 hover:underline font-mono"
-                                              >
-                                                {r.phone}
-                                              </a>
-                                            </div>
-                                          ) : (
-                                            <div className="flex items-center gap-1.5">
-                                              <span className="text-slate-500 dark:text-slate-400 font-medium">{t("radar.phoneLabel", "Teléfono:")}</span>
-                                              <span className="text-slate-400 italic text-[11px]">{t("radar.noPhone", "Sin teléfono registrado")}</span>
-                                            </div>
-                                          )}
-                                          {r.website ? (
-                                            <div className="flex items-center gap-1.5">
-                                              <span className="text-slate-500 dark:text-slate-400 font-medium">{t("radar.webLabel", "Sitio Web:")}</span>
-                                              <a
-                                                href={r.website}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="inline-flex items-center gap-1 text-sky-600 dark:text-sky-400 hover:underline max-w-[190px] truncate font-medium"
-                                                title={r.website}
-                                              >
-                                                <span>🌐 {r.website.replace(/^https?:\/\/(www\.)?/, "")}</span>
-                                                <span className="text-[10px]">↗</span>
-                                              </a>
-                                            </div>
-                                          ) : (
-                                            <div className="flex items-center gap-1.5">
-                                              <span className="text-slate-500 dark:text-slate-400 font-medium">{t("radar.webLabel", "Sitio Web:")}</span>
-                                              <span className="text-slate-400 italic text-[11px]">{t("radar.noWeb", "Sin sitio web oficial")}</span>
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      {/* 3. Acciones Rápidas & CRM */}
-                                      <div className="space-y-1.5 text-xs flex flex-col justify-between">
-                                        <div className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300">
-                                          <span>⚡</span>
-                                          <span>{t("radar.quickActions", "Acciones Rápidas")}</span>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-2 w-full">
-                                          <AddToListButton businessId={r.id} businessName={r.name} className="w-full" />
-                                          <AddToCrmButton businessId={r.id} businessName={r.name} className="w-full" />
-                                        </div>
-                                        <Link
-                                          href={`/proposals/${r.id}`}
-                                          prefetch={true}
-                                          className="inline-flex items-center justify-center gap-1 w-full py-1.5 px-3 rounded-md bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold text-xs shadow-xs transition-all"
-                                        >
-                                          <span>{t("radar.viewProposal", "Ver Análisis y Propuesta IA →")}</span>
-                                        </Link>
-                                      </div>
-                                    </div>
-                                  </td>
-                                </tr>
-                              )}
-                            </React.Fragment>
-                          );
-                        })}
+                        {paginatedResults.map((r) => (
+                          <RadarTableRow
+                            key={r.id}
+                            r={r}
+                            isSelected={r.id === selectedBusinessId}
+                            isExpanded={expandedRowId === r.id}
+                            isChecked={selectedIds.has(r.id)}
+                            cityDisplay={businessDisplayCache.cityMap.get(r.id) || "—"}
+                            categoryDisplay={businessDisplayCache.catMap.get(r.id) || "—"}
+                            locale={locale}
+                            t={t}
+                            onSelect={handleSelectRow}
+                            onToggleExpand={toggleRowExpand}
+                            onToggleCheck={toggleSelect}
+                          />
+                        ))}
                       </tbody>
                     </table>
                   </div>
 
-                  {/* Floating Sticky Bulk Actions Bar */}
-                  {selectedIds.size > 0 && (
-                    <div className="my-1.5 p-2 rounded-xl bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-md border border-sky-500/40 text-white shadow-lg shadow-sky-950/20 flex items-center justify-between gap-2 flex-wrap shrink-0 animate-in fade-in slide-in-from-bottom-2 duration-150">
-                      <div className="flex items-center gap-2">
-                        <span className="flex h-2 w-2 relative">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-500"></span>
-                        </span>
-                        <span className="text-xs font-semibold">
-                          <strong className="text-sky-400 font-mono text-sm">{selectedIds.size}</strong>{" "}
-                          {selectedIds.size === 1 ? "negocio seleccionado" : "negocios seleccionados"}
-                        </span>
-                        {selectedIds.size < filteredResults.length && (
-                          <button
-                            type="button"
-                            onClick={selectAllFiltered}
-                            className="text-[11px] text-sky-400 hover:text-sky-300 underline font-medium ml-1"
-                          >
-                            Seleccionar los {filteredResults.length} filtrados
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2">
+                  {/* Pagination Footer */}
+                  {totalPages > 1 && (
+                    <div className="px-3 py-2 border-t border-slate-200 dark:border-white/10 flex items-center justify-between gap-2 bg-slate-50/90 dark:bg-slate-900/90 shrink-0">
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                        {t("radar.pageCount", { current: safePage, total: totalPages }, `Página ${safePage} de ${totalPages}`)} ({sortedResults.length} {t("radar.resultsCount", "resultados")})
+                      </span>
+                      <div className="flex items-center gap-1">
                         <Button
-                          type="button"
                           size="sm"
-                          onClick={openSendToListModal}
-                          disabled={batchActionLoading}
-                          className="bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs h-7 px-3 shadow-xs shadow-sky-600/30 flex items-center gap-1.5"
+                          variant="outline"
+                          onClick={() => setCurrentPage(1)}
+                          disabled={safePage === 1}
+                          className="h-7 px-2 text-xs border-slate-200 dark:border-white/10 disabled:opacity-40 cursor-pointer"
+                          title={t("radar.firstPage", "Primera página")}
                         >
-                          <span>📁</span>
-                          <span>Enviar a Lista...</span>
+                          ««
                         </Button>
-
                         <Button
-                          type="button"
                           size="sm"
-                          onClick={handleBatchAddToCrm}
-                          disabled={batchActionLoading}
-                          className="bg-emerald-600 hover:emerald-500 text-white font-bold text-xs h-7 px-3 shadow-xs shadow-emerald-600/30 flex items-center gap-1.5"
+                          variant="outline"
+                          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                          disabled={safePage === 1}
+                          className="h-7 px-2.5 text-xs border-slate-200 dark:border-white/10 disabled:opacity-40 cursor-pointer"
                         >
-                          <span>🚀</span>
-                          <span>Al Pipeline CRM</span>
+                          {t("radar.prevPage", "← Anterior")}
                         </Button>
-
-                        <button
-                          type="button"
-                          onClick={clearSelection}
-                          className="text-xs text-slate-400 hover:text-white px-2 py-1 rounded transition-colors"
-                          title="Deseleccionar todos"
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                          disabled={safePage === totalPages}
+                          className="h-7 px-2.5 text-xs border-slate-200 dark:border-white/10 disabled:opacity-40 cursor-pointer"
                         >
-                          ✕ Limpiar
-                        </button>
+                          {t("radar.nextPage", "Siguiente →")}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setCurrentPage(totalPages)}
+                          disabled={safePage === totalPages}
+                          className="h-7 px-2 text-xs border-slate-200 dark:border-white/10 disabled:opacity-40 cursor-pointer"
+                          title={t("radar.lastPage", "Última página")}
+                        >
+                          »»
+                        </Button>
                       </div>
                     </div>
                   )}
-
-                  {/* Pagination footer */}
-                  <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-200 dark:border-white/5 flex-wrap gap-2 shrink-0">
-                    <div className="text-xs text-slate-600 dark:text-slate-400 font-medium">
-                      {t("common.showing", "Mostrando")}{" "}
-                      <span className="font-semibold text-slate-900 dark:text-slate-200 font-mono">
-                        {sortedResults.length === 0
-                          ? 0
-                          : (safePage - 1) * pageSize + 1}
-                      </span>
-                      -
-                      <span className="font-semibold text-slate-900 dark:text-slate-200 font-mono">
-                        {Math.min(safePage * pageSize, sortedResults.length)}
-                      </span>{" "}
-                      {t("common.of", "de")}{" "}
-                      <span className="font-semibold text-slate-900 dark:text-slate-200 font-mono">
-                        {sortedResults.length}
-                      </span>{" "}
-                      {t("common.businesses", "negocios")}
-                    </div>
-
-                    {totalPages > 1 && (
-                      <div className="flex items-center gap-1 flex-wrap justify-end">
-                        {/* First Page (Inicio) */}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={safePage <= 1}
-                          onClick={() => setCurrentPage(1)}
-                          title={t("common.first", "« Inicio")}
-                          className="h-6 px-1.5 text-[11px] text-slate-700 dark:text-slate-300 disabled:opacity-40"
-                        >
-                          {t("common.first", "« Inicio")}
-                        </Button>
-
-                        {/* Previous Page */}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={safePage <= 1}
-                          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                          title={t("common.prev", "← Anterior")}
-                          className="h-6 px-2 text-[11px] text-slate-700 dark:text-slate-300 disabled:opacity-40"
-                        >
-                          {t("common.prev", "← Anterior")}
-                        </Button>
-
-                        <div className="flex items-center gap-0.5">
-                          {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
-                            if (
-                              totalPages > 6 &&
-                              pageNum !== 1 &&
-                              pageNum !== totalPages &&
-                              Math.abs(pageNum - safePage) > 1
-                            ) {
-                              if (pageNum === 2 || pageNum === totalPages - 1) {
-                                return (
-                                  <span key={pageNum} className="text-slate-400 dark:text-slate-600 px-0.5 select-none font-mono text-xs">
-                                    …
-                                  </span>
-                                );
-                              }
-                              return null;
-                            }
-                            const isCurrent = pageNum === safePage;
-                            return (
-                              <button
-                                key={pageNum}
-                                type="button"
-                                onClick={() => setCurrentPage(pageNum)}
-                                className={`w-6 h-6 rounded font-mono text-[11px] transition-colors ${
-                                  isCurrent
-                                    ? "bg-sky-500 text-white font-bold shadow-2xs"
-                                    : "text-slate-700 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-                                }`}
-                              >
-                                {pageNum}
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        {/* Next Page */}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={safePage >= totalPages}
-                          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                          title={t("common.nextArrow", "Siguiente →")}
-                          className="h-6 px-2 text-[11px] text-slate-700 dark:text-slate-300 disabled:opacity-40"
-                        >
-                          {t("common.nextArrow", "Siguiente →")}
-                        </Button>
-
-                        {/* Last Page (Último) */}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={safePage >= totalPages}
-                          onClick={() => setCurrentPage(totalPages)}
-                          title={t("common.last", "Último »")}
-                          className="h-6 px-1.5 text-[11px] text-slate-700 dark:text-slate-300 disabled:opacity-40"
-                        >
-                          {t("common.last", "Último »")}
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {!searched && !loading && hydrated && (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <div className="text-3xl mb-2">◎</div>
-                  <p className="text-sm text-slate-500 max-w-md mx-auto">
-                    {t("radar.initialHint", "Configurá la búsqueda arriba y vas a ver los resultados en el mapa y en la tabla en paralelo.")}
-                  </p>
                 </CardContent>
               </Card>
             )}
           </div>
         </div>
 
-        {/* Modal Dialog para Enviar Masivamente a Lista */}
-        <Dialog open={isListModalOpen} onOpenChange={setIsListModalOpen}>
-          <DialogContent className="sm:max-w-md bg-white dark:bg-slate-900 border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100">
+        {/* ───────── Bulk Add to List Modal Dialog ───────── */}
+        <Dialog open={isBulkListModalOpen} onOpenChange={setIsBulkListModalOpen}>
+          <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="text-base font-bold flex items-center gap-2">
-                <span>📁</span>
-                <span>Guardar {selectedIds.size} negocios en una Lista</span>
+              <DialogTitle className="flex items-center gap-2">
+                <span>📥</span>
+                <span>{t("radar.bulkModalTitle", { count: selectedIds.size }, `Guardar ${selectedIds.size} Negocios en Lista`)}</span>
               </DialogTitle>
-              <DialogDescription className="text-xs text-slate-500 dark:text-slate-400">
-                Selecciona una lista existente o crea una nueva. Los negocios se guardarán de forma persistente en SQLite y podrás gestionarlos en la sección de Listas.
+              <DialogDescription>
+                {t("radar.bulkModalSubtitle", "Selecciona una lista existente o crea una nueva para organizar y dar seguimiento a estos leads.")}
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-3 py-2">
-              {loadingLists ? (
-                <div className="py-6 text-center text-xs text-slate-400">
-                  <div className="inline-block w-5 h-5 border-2 border-sky-400 border-t-transparent rounded-full animate-spin mb-2" />
-                  <p>Cargando tus listas...</p>
+            {bulkSaveSuccess ? (
+              <div className="py-6 text-center text-emerald-600 dark:text-emerald-400 font-semibold space-y-1">
+                <span className="text-3xl">✓</span>
+                <p>{t("radar.bulkSavedSuccess", "¡Negocios guardados exitosamente en la lista!")}</p>
+              </div>
+            ) : (
+              <div className="space-y-4 py-2">
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    {t("radar.bulkDestinationList", "Lista de destino")}
+                  </Label>
+                  <select
+                    value={selectedTargetListId}
+                    onChange={(e) => setSelectedTargetListId(e.target.value)}
+                    className="w-full h-9 rounded-md border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 px-3 text-xs text-slate-900 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-sky-500"
+                  >
+                    {userLists.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        📋 {l.name}
+                      </option>
+                    ))}
+                    <option value="NEW">➕ {t("radar.createNewListOption", "Crear una nueva lista...")}</option>
+                  </select>
                 </div>
-              ) : isCreatingInlineList ? (
-                <div className="space-y-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-white/10">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      Nombre de la nueva lista
-                    </label>
+
+                {selectedTargetListId === "NEW" && (
+                  <div className="space-y-1.5 animate-in fade-in-50 duration-150">
+                    <Label htmlFor="newListName" className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      {t("radar.newListNameLabel", "Nombre de la nueva lista")}
+                    </Label>
                     <Input
-                      placeholder="Ej. Dentistas Alta Prioridad Corona"
+                      id="newListName"
                       value={newListName}
                       onChange={(e) => setNewListName(e.target.value)}
-                      className="h-8 text-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"
+                      placeholder={t("radar.newListNamePlaceholder", "ej: Clínicas Dentales - Corona...")}
+                      className="h-9 text-xs"
                       autoFocus
                     />
                   </div>
+                )}
+              </div>
+            )}
 
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      Color de identificación
-                    </label>
-                    <div className="flex items-center gap-2">
-                      {[
-                        { id: "sky", bg: "bg-sky-500" },
-                        { id: "emerald", bg: "bg-emerald-500" },
-                        { id: "amber", bg: "bg-amber-500" },
-                        { id: "rose", bg: "bg-rose-500" },
-                        { id: "purple", bg: "bg-purple-500" },
-                        { id: "indigo", bg: "bg-indigo-500" },
-                      ].map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => setNewListColor(c.id)}
-                          className={`w-6 h-6 rounded-full ${c.bg} transition-all ${
-                            newListColor === c.id
-                              ? "ring-2 ring-offset-2 ring-slate-900 dark:ring-white scale-110"
-                              : "opacity-70 hover:opacity-100"
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-end gap-2 pt-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setIsCreatingInlineList(false)}
-                      className="h-7 text-xs"
-                    >
-                      Volver a listas existentes
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      Elige una lista de destino:
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setIsCreatingInlineList(true)}
-                      className="text-xs font-bold text-sky-600 dark:text-sky-400 hover:underline"
-                    >
-                      + Crear nueva lista
-                    </button>
-                  </div>
-
-                  {availableLists.length === 0 ? (
-                    <div className="p-4 text-center border border-dashed border-slate-300 dark:border-slate-700 rounded-lg">
-                      <p className="text-xs text-slate-500 mb-2">No tienes ninguna lista creada todavía.</p>
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => setIsCreatingInlineList(true)}
-                        className="text-xs h-7 bg-sky-600 hover:bg-sky-500 text-white font-semibold"
-                      >
-                        + Crear mi primera lista
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="max-h-[220px] overflow-y-auto space-y-1.5 pr-1">
-                      {availableLists.map((list) => {
-                        const isSelected = targetListId === list.id;
-                        return (
-                          <label
-                            key={list.id}
-                            className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition-all ${
-                              isSelected
-                                ? "bg-sky-50 dark:bg-sky-500/15 border-sky-500 text-sky-900 dark:text-sky-200 shadow-xs"
-                                : "bg-slate-50/60 dark:bg-slate-800/40 border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-slate-600 text-slate-800 dark:text-slate-200"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2.5">
-                              <input
-                                type="radio"
-                                name="target_list"
-                                value={list.id}
-                                checked={isSelected}
-                                onChange={() => setTargetListId(list.id)}
-                                className="w-3.5 h-3.5 text-sky-600 focus:ring-sky-500 cursor-pointer accent-sky-500"
-                              />
-                              <span className="w-2.5 h-2.5 rounded-full bg-sky-500 shrink-0" />
-                              <span className="font-semibold text-xs">{list.name}</span>
-                            </div>
-                            {list.description && (
-                              <span className="text-[11px] text-slate-400 truncate max-w-[140px]">
-                                {list.description}
-                              </span>
-                            )}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <DialogFooter className="flex items-center justify-between gap-2 border-t border-slate-100 dark:border-white/5 pt-3">
+            <DialogFooter className="gap-2 sm:gap-0">
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
-                onClick={() => setIsListModalOpen(false)}
-                disabled={batchActionLoading}
-                className="text-xs h-8"
+                onClick={() => setIsBulkListModalOpen(false)}
+                disabled={isSavingBulk}
+                className="text-xs cursor-pointer"
               >
-                Cancelar
+                {t("common.cancel", "Cancelar")}
               </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={handleBatchAddToList}
-                disabled={
-                  batchActionLoading ||
-                  (isCreatingInlineList ? !newListName.trim() : !targetListId)
-                }
-                className="bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs h-8 px-4 shadow-sm shadow-sky-600/30"
-              >
-                {batchActionLoading ? (
-                  <>
-                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5" />
-                    <span>Guardando...</span>
-                  </>
-                ) : (
-                  <span>Guardar {selectedIds.size} negocios</span>
-                )}
-              </Button>
+              {!bulkSaveSuccess && (
+                <Button
+                  type="button"
+                  onClick={handleBulkAddToList}
+                  disabled={isSavingBulk || (selectedTargetListId === "NEW" && !newListName.trim())}
+                  className="bg-sky-600 hover:bg-sky-700 text-white font-semibold text-xs cursor-pointer"
+                >
+                  {isSavingBulk ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>{t("common.saving", "Guardando...")}</span>
+                    </span>
+                  ) : (
+                    <span>{t("radar.confirmSaveBulk", { count: selectedIds.size }, `Guardar ${selectedIds.size} negocios`)}</span>
+                  )}
+                </Button>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
+    </div>
   );
 }

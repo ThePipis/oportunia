@@ -140,6 +140,14 @@
     - [x] Traducciones bilingües (ES/EN) añadidas en `lib/i18n/es.json` y `en.json`.
     - [x] `.env.example` actualizado con `GEOAPIFY_API_KEY` como proveedor primario.
     - [x] Verificación TypeScript: `npx tsc --noEmit` → 0 errores.
+  - [x] **Optimización de Rendimiento y Fluidez en el Radar (`app/radar/page.tsx`)**:
+    - [x] **Eliminación del Re-render en Cascada por Hover**: Reemplazado `setHoveredBusinessId` síncrono en cada fila por hover CSS nativo `:hover`, eliminando 50+ re-renders por segundo al mover el ratón.
+    - [x] **Componente Memoizado `RadarTableRow` (`React.memo`)**: Las filas solo se re-renderizan individualmente al cambiar su estado (`isChecked`, `isExpanded`, `isSelected`).
+    - [x] **Pre-cálculo O(1) con Display Cache (`businessDisplayCache`)**: Ciudades y categorías traducidas se pre-calculan una sola vez en lugar de evaluar 50+ expresiones regulares en cada frame.
+    - [x] **Algoritmo de Ordenamiento O(N) Pre-Keying**: Se indexan las claves de ordenamiento antes del `sort()`, eliminando cuellos de botella en comparaciones N log N.
+    - [x] **Auto-despliegue de Detalles al Seleccionar Fila o Pin**: Al hacer clic en cualquier fila o en un marcador del mapa, se despliega automáticamente el drawer de detalles completo (dirección, teléfono, web, acciones rápidas) y se vuelve a plegar si se pulsa de nuevo.
+    - [x] **Panel de Filtros Plegado por Defecto y Auto-cierre Estricto al Buscar**: El formulario de filtros inicia estrictamente contraído/plegado (`isFilterCollapsed: true`) por defecto en cada carga para maximizar la visibilidad del mapa y tabla. Al ejecutar cualquier búsqueda ("Buscar" / Enter), se pliega automáticamente. Para modificar parámetros o realizar una nueva búsqueda, el usuario pulsa manualmente el botón de toggle ("Desplegar filtros" / "Plegar filtros"). Limpiar filtros ya no fuerza la apertura del panel.
+    - [x] **Verificación TypeScript**: `npx tsc --noEmit` → 0 errores.
 
 ## Próximos Pasos Disponibles
 - [ ] Probar Geoapify en producción con API Key real y validar resultados del Radar.
